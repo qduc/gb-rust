@@ -12,9 +12,9 @@
   - Frontend feature work.
 
 ## Acceptance Criteria
-- [ ] Orchestration remains in `crates/gb-core/src/gb.rs`.
-- [ ] `Cpu::step()` remains the time driver and `Bus::tick()` remains the subsystem updater.
-- [ ] Frontend concerns remain outside `gb-core`.
+- [x] Orchestration remains in `crates/gb-core/src/gb.rs`.
+- [x] `Cpu::step()` remains the time driver and `Bus::tick()` remains the subsystem updater.
+- [x] Frontend concerns remain outside `gb-core`.
 
 ## Tests
 - Unit tests:
@@ -30,9 +30,9 @@
 4. Run workspace quality gates and update roadmap/doc checklists.
 
 ## Exit Gate
-- [ ] `cargo fmt --all`
-- [ ] `cargo clippy --workspace --all-targets -- -D warnings`
-- [ ] `cargo test --workspace`
+- [x] `cargo fmt --all` (passed)
+- [x] `cargo clippy --workspace --all-targets -- -D warnings` (passed)
+- [x] `cargo test --workspace` (passed)
 
 ## Notes
 - Risks:
