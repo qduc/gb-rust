@@ -259,7 +259,7 @@ impl Cpu {
             ops::exec(self, bus, opcode)
         };
 
-        if enable_ime_after {
+        if enable_ime_after && opcode != 0xF3 {
             self.ime = true;
         }
 

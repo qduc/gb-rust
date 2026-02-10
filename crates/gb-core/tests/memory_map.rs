@@ -246,6 +246,28 @@ fn mbc3_ram_banking_and_rtc_select() {
 }
 
 #[test]
+fn mbc3_rom_bank_switches_and_bank0_maps_to_1() {
+    let mut rom = make_banked_rom(8);
+    rom[0x0147] = 0x11; // MBC3
+    rom[0x0148] = 0x03; // 256KB = 8 banks
+    rom[0x0149] = 0x00; // No RAM
+
+    let cart = Cartridge::from_rom(rom).unwrap();
+    let mut bus = Bus::new(cart);
+
+    // Default switchable bank is 1.
+    assert_eq!(bus.read8(0x4000), 0x01);
+
+    // Select bank 2.
+    bus.write8(0x2000, 0x02);
+    assert_eq!(bus.read8(0x4000), 0x02);
+
+    // Selecting bank 0 should map to bank 1.
+    bus.write8(0x2000, 0x00);
+    assert_eq!(bus.read8(0x4000), 0x01);
+}
+
+#[test]
 fn vram_read_write() {
     let rom = vec![0x00; 0x4000];
     let cart = Cartridge::from_rom(rom).unwrap();

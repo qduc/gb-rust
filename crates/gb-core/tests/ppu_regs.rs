@@ -42,3 +42,29 @@ fn ly_write_resets_to_zero() {
     bus.tick(456);
     assert_eq!(bus.read8(0xFF44), 1);
 }
+
+#[test]
+fn stat_mode_interrupt_bits_request_interrupts() {
+    let cart = Cartridge::from_rom(make_rom()).unwrap();
+    let mut bus = Bus::new(cart);
+
+    bus.write8(0xFF40, 0x80); // LCD on
+
+    // Enable HBlank STAT interrupt (mode 0, bit 3).
+    bus.write8(0xFF41, 0x08);
+    bus.iflag = 0;
+    bus.tick(252); // mode 2 (80) + mode 3 (172) -> enter mode 0
+    assert_ne!(bus.iflag & 0x02, 0);
+
+    // Enable OAM STAT interrupt (mode 2, bit 5).
+    bus.write8(0xFF41, 0x20);
+    bus.iflag = 0;
+    bus.tick(204); // finish line, next line enters mode 2
+    assert_ne!(bus.iflag & 0x02, 0);
+
+    // Enable VBlank STAT interrupt (mode 1, bit 4).
+    bus.write8(0xFF41, 0x10);
+    bus.iflag = 0;
+    bus.tick(456 * 143); // reach LY=144 from LY=1
+    assert_ne!(bus.iflag & 0x02, 0);
+}

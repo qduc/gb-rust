@@ -24,6 +24,23 @@ fn div_increments_and_resets_on_write() {
 }
 
 #[test]
+fn div_write_triggers_tima_on_falling_edge() {
+    let cart = Cartridge::from_rom(make_rom()).unwrap();
+    let mut bus = Bus::new(cart);
+
+    // Enable timer at 16-cycle rate (input bit 3).
+    bus.write8(0xFF07, 0x05);
+    bus.write8(0xFF05, 0x00);
+
+    // Counter=8 => selected input bit is high.
+    bus.tick(8);
+    bus.write8(0xFF04, 0x00);
+
+    // DIV reset creates old=1 -> new=0 transition, so TIMA increments.
+    assert_eq!(bus.read8(0xFF05), 0x01);
+}
+
+#[test]
 fn tima_increments_at_selected_frequency() {
     let cart = Cartridge::from_rom(make_rom()).unwrap();
     let mut bus = Bus::new(cart);
@@ -36,6 +53,20 @@ fn tima_increments_at_selected_frequency() {
 
     bus.tick(16);
     assert_eq!(bus.read8(0xFF05), 0x02);
+}
+
+#[test]
+fn tac_write_triggers_tima_on_falling_edge() {
+    let cart = Cartridge::from_rom(make_rom()).unwrap();
+    let mut bus = Bus::new(cart);
+
+    bus.write8(0xFF05, 0x00);
+    bus.write8(0xFF07, 0x05); // enabled, input bit 3
+    bus.tick(8); // selected input bit is high
+
+    // Disable timer; old=1 -> new=0 should increment TIMA once.
+    bus.write8(0xFF07, 0x00);
+    assert_eq!(bus.read8(0xFF05), 0x01);
 }
 
 #[test]
