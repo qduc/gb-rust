@@ -93,7 +93,7 @@ fn hram_ie_if_registers_map() {
 
     // Test IF register (0xFF0F)
     bus.write8(0xFF0F, 0x0F);
-    assert_eq!(bus.read8(0xFF0F), 0x0F);
+    assert_eq!(bus.read8(0xFF0F), 0xEF);
 
     // Test IE register (0xFFFF)
     bus.write8(0xFFFF, 0xE0);

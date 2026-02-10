@@ -26,10 +26,10 @@ Use this checklist in order. Do not move to the next phase until the current one
 - [x] Add interrupt handling
 
 ## 5) Timer, Interrupts, DMA
-- [ ] Complete timer cycle behavior
-- [ ] Wire interrupt request/ack flow
-- [ ] Implement OAM DMA behavior
-- [ ] Add subsystem integration tests
+- [x] Complete timer cycle behavior
+- [x] Wire interrupt request/ack flow
+- [x] Implement OAM DMA behavior
+- [x] Add subsystem integration tests
 
 ## 6) PPU (Staged)
 - [ ] Implement mode timing + LY/STAT

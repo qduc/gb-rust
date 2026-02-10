@@ -1,5 +1,6 @@
 use crate::apu::Apu;
 use crate::cartridge::Cartridge;
+use crate::dma;
 use crate::input::Joypad;
 use crate::ppu::Ppu;
 use crate::timer::Timer;
@@ -61,13 +62,14 @@ impl Bus {
             0xFEA0..=0xFEFF => 0xFF,
 
             // IO Registers: 0xFF00..=0xFF7F
-            0xFF00..=0xFF7F => {
-                if addr == 0xFF0F {
-                    self.iflag
-                } else {
-                    self.io[(addr - 0xFF00) as usize]
-                }
-            }
+            0xFF00..=0xFF7F => match addr {
+                0xFF04 => self.timer.read_div(),
+                0xFF05 => self.timer.read_tima(),
+                0xFF06 => self.timer.read_tma(),
+                0xFF07 => self.timer.read_tac(),
+                0xFF0F => self.iflag | 0xE0,
+                _ => self.io[(addr - 0xFF00) as usize],
+            },
 
             // HRAM: 0xFF80..=0xFFFE
             0xFF80..=0xFFFE => self.hram[(addr - 0xFF80) as usize],
@@ -102,10 +104,18 @@ impl Bus {
 
             // IO Registers: 0xFF00..=0xFF7F
             0xFF00..=0xFF7F => {
-                if addr == 0xFF0F {
-                    self.iflag = val;
-                } else {
-                    self.io[(addr - 0xFF00) as usize] = val;
+                let idx = (addr - 0xFF00) as usize;
+                match addr {
+                    0xFF04 => self.timer.write_div(&mut self.iflag),
+                    0xFF05 => self.timer.write_tima(val),
+                    0xFF06 => self.timer.write_tma(val),
+                    0xFF07 => self.timer.write_tac(val, &mut self.iflag),
+                    0xFF0F => self.iflag = val & 0x1F,
+                    0xFF46 => {
+                        self.io[idx] = val;
+                        dma::oam_dma(self, val);
+                    }
+                    _ => self.io[idx] = val,
                 }
             }
 
