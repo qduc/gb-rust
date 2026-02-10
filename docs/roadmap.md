@@ -19,11 +19,11 @@ Use this checklist in order. Do not move to the next phase until the current one
 - [x] Add tests for address ranges and bank switching
 
 ## 4) CPU Execution Path
-- [ ] Complete opcode decode path
-- [ ] Implement non-CB ops in `ops.rs`
-- [ ] Implement CB ops in `cb_ops.rs`
-- [ ] Add ALU/flag behavior tests
-- [ ] Add interrupt handling
+- [x] Complete opcode decode path
+- [x] Implement non-CB ops in `ops.rs`
+- [x] Implement CB ops in `cb_ops.rs`
+- [x] Add ALU/flag behavior tests
+- [x] Add interrupt handling
 
 ## 5) Timer, Interrupts, DMA
 - [ ] Complete timer cycle behavior
@@ -50,9 +50,9 @@ Use this checklist in order. Do not move to the next phase until the current one
 - [ ] Keep emulation behavior in `gb-core`
 
 ## 9) Quality Gate (Every Phase)
-- [ ] Run `cargo fmt --all`
-- [ ] Run `cargo clippy --workspace --all-targets -- -D warnings`
-- [ ] Run `cargo test --workspace`
+- [x] Run `cargo fmt --all`
+- [x] Run `cargo clippy --workspace --all-targets -- -D warnings`
+- [x] Run `cargo test --workspace`
 - [ ] Commit one focused subsystem change at a time
 
 ## 10) Final Hardening
