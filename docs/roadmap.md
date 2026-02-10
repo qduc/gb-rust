@@ -32,7 +32,7 @@ Use this checklist in order. Do not move to the next phase until the current one
 - [x] Add subsystem integration tests
 
 ## 6) PPU (Staged)
-- [ ] Implement mode timing + LY/STAT
+- [x] Implement mode timing + LY/STAT
 - [ ] Render background
 - [ ] Render window
 - [ ] Render sprites

@@ -111,6 +111,11 @@ impl Bus {
                     0xFF06 => self.timer.write_tma(val),
                     0xFF07 => self.timer.write_tac(val, &mut self.iflag),
                     0xFF0F => self.iflag = val & 0x1F,
+                    0xFF41 => self.io[idx] = (self.io[idx] & 0x07) | (val & 0x78),
+                    0xFF44 => {
+                        self.io[idx] = 0;
+                        self.ppu.reset_ly();
+                    }
                     0xFF46 => {
                         self.io[idx] = val;
                         dma::oam_dma(self, val);
@@ -129,7 +134,7 @@ impl Bus {
 
     pub fn tick(&mut self, cycles: u32) {
         self.timer.tick(cycles, &mut self.iflag);
-        self.ppu.tick(cycles, &mut self.iflag);
+        self.ppu.tick(cycles, &mut self.io, &mut self.iflag);
         self.apu.tick(cycles);
     }
 }
