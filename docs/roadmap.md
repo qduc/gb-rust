@@ -8,15 +8,15 @@ Use this checklist in order. Do not move to the next phase until the current one
 - [x] Verify `gb-core`, `gb-cli`, and `gb-sdl` all compile
 
 ## 2) Core Architecture Lock
-- [ ] Keep orchestration in `crates/gb-core/src/gb.rs`
-- [ ] Keep `Cpu::step()` as time driver and `Bus::tick()` as subsystem updater
-- [ ] Keep frontend concerns out of `gb-core`
+- [x] Keep orchestration in `crates/gb-core/src/gb.rs`
+- [x] Keep `Cpu::step()` as time driver and `Bus::tick()` as subsystem updater
+- [x] Keep frontend concerns out of `gb-core`
 
 ## 3) Cartridge + Memory Map
-- [ ] Finish `mbc0`
-- [ ] Implement `mbc1`
-- [ ] Complete `Bus::read8/write8` mapping
-- [ ] Add tests for address ranges and bank switching
+- [x] Finish `mbc0`
+- [x] Implement `mbc1`
+- [x] Complete `Bus::read8/write8` mapping
+- [x] Add tests for address ranges and bank switching
 
 ## 4) CPU Execution Path
 - [ ] Complete opcode decode path
