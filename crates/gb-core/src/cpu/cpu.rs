@@ -14,3 +14,9 @@ impl Cpu {
         4
     }
 }
+
+impl Default for Cpu {
+    fn default() -> Self {
+        Self::new()
+    }
+}

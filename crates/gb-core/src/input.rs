@@ -5,3 +5,9 @@ impl Joypad {
         Self {}
     }
 }
+
+impl Default for Joypad {
+    fn default() -> Self {
+        Self::new()
+    }
+}

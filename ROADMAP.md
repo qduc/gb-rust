@@ -3,9 +3,9 @@
 Use this checklist in order. Do not move to the next phase until the current one passes its validation commands.
 
 ## 1) Baseline
-- [ ] Run `cargo check --workspace`
-- [ ] Run `cargo test --workspace`
-- [ ] Verify `gb-core`, `gb-cli`, and `gb-sdl` all compile
+- [x] Run `cargo check --workspace`
+- [x] Run `cargo test --workspace`
+- [x] Verify `gb-core`, `gb-cli`, and `gb-sdl` all compile
 
 ## 2) Core Architecture Lock
 - [ ] Keep orchestration in `crates/gb-core/src/gb.rs`

@@ -1,5 +1,5 @@
-use crate::cpu::Cpu;
 use crate::bus::Bus;
+use crate::cpu::Cpu;
 
 pub struct GameBoy {
     pub cpu: Cpu,

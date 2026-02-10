@@ -5,6 +5,11 @@ impl Timer {
         Self {}
     }
 
-    pub fn tick(&mut self, _cycles: u32, _iflag: &mut u8) {
+    pub fn tick(&mut self, _cycles: u32, _iflag: &mut u8) {}
+}
+
+impl Default for Timer {
+    fn default() -> Self {
+        Self::new()
     }
 }

@@ -11,8 +11,7 @@ impl Ppu {
         }
     }
 
-    pub fn tick(&mut self, _cycles: u32, _iflag: &mut u8) {
-    }
+    pub fn tick(&mut self, _cycles: u32, _iflag: &mut u8) {}
 
     pub fn frame_ready(&self) -> bool {
         self.frame_ready
@@ -20,5 +19,11 @@ impl Ppu {
 
     pub fn clear_frame_ready(&mut self) {
         self.frame_ready = false;
+    }
+}
+
+impl Default for Ppu {
+    fn default() -> Self {
+        Self::new()
     }
 }

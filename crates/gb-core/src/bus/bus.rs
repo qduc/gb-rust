@@ -1,8 +1,8 @@
-use crate::cartridge::Cartridge;
-use crate::ppu::Ppu;
 use crate::apu::Apu;
-use crate::timer::Timer;
+use crate::cartridge::Cartridge;
 use crate::input::Joypad;
+use crate::ppu::Ppu;
+use crate::timer::Timer;
 
 pub struct Bus {
     pub cart: Cartridge,
@@ -21,8 +21,7 @@ impl Bus {
         0
     }
 
-    pub fn write8(&mut self, _addr: u16, _val: u8) {
-    }
+    pub fn write8(&mut self, _addr: u16, _val: u8) {}
 
     pub fn tick(&mut self, cycles: u32) {
         self.timer.tick(cycles, &mut self.iflag);
