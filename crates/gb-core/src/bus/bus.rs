@@ -138,10 +138,11 @@ impl Bus {
                     0xFF02 => {
                         self.io[idx] = val;
                         // Common test ROM convention: write a byte to SB (0xFF01), then write 0x81
-                        // to SC (0xFF02) to "transfer" it out via the serial port.
+                        // to SC (0xFF02) to start a serial transfer.
                         if (val & 0x80) != 0 {
-                            self.serial.on_transfer(self.io[0x01]);
-                            self.io[idx] = val & 0x7F; // clear transfer-start bit
+                            self.serial.start_transfer(self.io[0x01], &mut self.io[idx]);
+                        } else {
+                            self.serial.stop_transfer(&mut self.io[idx]);
                         }
                     }
                     0xFF41 => self.io[idx] = (self.io[idx] & 0x07) | (val & 0x78),
@@ -176,6 +177,8 @@ impl Bus {
         self.ppu
             .tick(cycles, &self.vram, &self.oam, &mut self.io, &mut self.iflag);
         self.apu.tick(cycles);
+        self.serial
+            .tick(cycles, &mut self.iflag, &mut self.io[0x02]);
     }
 
     pub fn save_to_path(&self, path: &Path) -> Result<(), crate::cartridge::SaveError> {

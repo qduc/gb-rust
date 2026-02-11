@@ -180,7 +180,7 @@ fn parse_suite_args(args: &[String]) -> Result<SuiteArgs, String> {
     let mut rom_dir = PathBuf::from("roms");
     let mut rom_paths: Vec<PathBuf> = Vec::new();
     let mut max_frames: Option<u64> = None;
-    let mut max_cycles: Option<u64> = Some(100_000_000);
+    let mut max_cycles: Option<u64> = Some(300_000_000);
     let mut pass_text = vec!["passed".to_string()];
     let mut fail_text = vec!["failed".to_string(), "fail".to_string()];
     let mut print_serial = false;
@@ -307,7 +307,7 @@ fn init_dmg_post_boot(gb: &mut GameBoy) {
     gb.cpu.pc = 0x0100;
 
     gb.bus.ie = 0x00;
-    gb.bus.iflag = 0x01;
+    gb.bus.iflag = 0x00;
 
     // Initialize key IO registers (enough for typical test ROMs).
     // Use bus writes to respect any masking side effects.
@@ -512,7 +512,7 @@ fn run_single(args: RunArgs) -> Result<i32, String> {
             let b1 = gb.bus.read8(pc.wrapping_add(1));
             let b2 = gb.bus.read8(pc.wrapping_add(2));
             eprintln!(
-                "CYC={cycles:010} PC={pc:04X} OP={b0:02X} {b1:02X} {b2:02X} AF={:02X}{:02X} BC={:02X}{:02X} DE={:02X}{:02X} HL={:02X}{:02X} SP={:04X} IME={} HALT={}",
+                "CYC={cycles:010} PC={pc:04X} OP={b0:02X} {b1:02X} {b2:02X} AF={:02X}{:02X} BC={:02X}{:02X} DE={:02X}{:02X} HL={:02X}{:02X} SP={:04X} IME={} HALT={} IE={:02X} IF={:02X}",
                 gb.cpu.a,
                 gb.cpu.f,
                 gb.cpu.b,
@@ -523,7 +523,9 @@ fn run_single(args: RunArgs) -> Result<i32, String> {
                 gb.cpu.l,
                 gb.cpu.sp,
                 gb.cpu.ime,
-                gb.cpu.halted
+                gb.cpu.halted,
+                gb.bus.ie,
+                gb.bus.iflag
             );
             let step_cycles = gb.cpu.step(&mut gb.bus);
             gb.bus.tick(step_cycles);

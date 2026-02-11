@@ -271,15 +271,16 @@ impl Cpu {
         self.step_cycles = 0;
 
         let pending = pending_mask(bus.ie, bus.iflag);
+        let requested = bus.iflag & 0x1F;
 
         if self.halted {
-            if pending == 0 {
+            if requested == 0 {
                 self.tick_idle(bus, 4);
                 return 4;
             }
 
             self.halted = false;
-            if self.ime {
+            if self.ime && pending != 0 {
                 return self.service_interrupt(bus, pending);
             }
         } else if self.ime && pending != 0 {

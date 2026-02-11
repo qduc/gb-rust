@@ -114,6 +114,23 @@ fn halt_with_pending_interrupt_and_ime_false_resumes_execution() {
 }
 
 #[test]
+fn halt_wakes_on_requested_interrupt_even_if_ie_disabled() {
+    let (mut cpu, mut bus) = setup(&[0x00]); // NOP
+    cpu.halted = true;
+    cpu.ime = false;
+
+    bus.ie = 0x00;
+    bus.iflag = 0x01;
+
+    let cycles = cpu.step(&mut bus);
+
+    assert_eq!(cycles, 4);
+    assert!(!cpu.halted);
+    assert_eq!(cpu.pc, 1);
+    assert_ne!(bus.iflag & 0x01, 0);
+}
+
+#[test]
 fn halt_with_pending_interrupt_and_ime_true_services_interrupt() {
     let (mut cpu, mut bus) = setup(&[]);
     cpu.halted = true;
