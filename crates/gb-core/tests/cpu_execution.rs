@@ -253,6 +253,30 @@ fn halt_bug_duplicates_next_opcode_fetch_when_ime_off_and_interrupt_pending() {
 }
 
 #[test]
+fn halt_bug_with_multibyte_instruction() {
+    // HALT ; LD DE, 0x1234 ; (garbled bytes)
+    let (mut cpu, mut bus) = setup(&[0x76, 0x11, 0x34, 0x12, 0x00]);
+    cpu.ime = false;
+    bus.ie = 0x01;
+    bus.iflag = 0x01;
+
+    // Step 1: Execute HALT
+    let cycles = cpu.step(&mut bus);
+    assert_eq!(cycles, 4);
+    assert_eq!(cpu.pc, 1);
+    assert!(cpu.halted);
+
+    // Step 2: Wake from HALT with bug
+    // Opcode fetch at PC=1 reads 0x11 (LD DE) without incrementing PC
+    // Then operand fetches: read from PC=1 (0x11) and PC=2 (0x34)
+    // So DE gets the garbled value 0x3411 (opcode byte + next byte)
+    let cycles = cpu.step(&mut bus);
+    assert_eq!(cycles, 12); // LD DE, imm16 takes 12 cycles
+    assert_eq!(cpu.de(), 0x3411); // Garbled: opcode byte 0x11 + 0x34
+    assert_eq!(cpu.pc, 3); // PC is at 0x12 (what should have been high byte)
+}
+
+#[test]
 fn cpu_step_advances_timer_without_external_bus_tick() {
     let (mut cpu, mut bus) = setup(&[0x00, 0x00, 0x00, 0x00]); // 4x NOP
 
