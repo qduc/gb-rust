@@ -108,7 +108,7 @@ fn halt_with_pending_interrupt_and_ime_false_resumes_execution() {
 
     assert_eq!(cycles, 4);
     assert!(!cpu.halted);
-    assert_eq!(cpu.pc, 1);
+    assert_eq!(cpu.pc, 0);
     assert_ne!(bus.iflag & 0x01, 0);
 }
 
@@ -217,13 +217,52 @@ fn cb_rlc_and_bit_hl_update_flags_and_cycles() {
     assert_eq!(cpu.b, 0x01);
     assert_flags(&cpu, false, false, false, true);
 
-    // BIT 0,(HL): checks bit without changing C, and costs 16 cycles for (HL).
+    // BIT 0,(HL): checks bit without changing C, and costs 12 cycles for (HL).
     let (mut cpu, mut bus) = setup(&[0xCB, 0x46]);
     cpu.set_hl(0xC000);
     bus.write8(0xC000, 0x00);
     cpu.set_flag(Flag::C, true);
 
     let cycles = cpu.step(&mut bus);
-    assert_eq!(cycles, 16);
+    assert_eq!(cycles, 12);
     assert_flags(&cpu, true, false, true, true);
+}
+
+#[test]
+fn halt_bug_duplicates_next_opcode_fetch_when_ime_off_and_interrupt_pending() {
+    // HALT ; NOP ; NOP
+    let (mut cpu, mut bus) = setup(&[0x76, 0x00, 0x00]);
+    cpu.ime = false;
+    bus.ie = 0x01;
+    bus.iflag = 0x01;
+
+    let cycles = cpu.step(&mut bus);
+    assert_eq!(cycles, 4);
+    assert_eq!(cpu.pc, 1);
+    assert!(cpu.halted);
+    assert_ne!(bus.iflag & 0x01, 0);
+
+    let cycles = cpu.step(&mut bus);
+    assert_eq!(cycles, 4);
+    // HALT bug keeps PC on the duplicated fetch.
+    assert_eq!(cpu.pc, 1);
+
+    let cycles = cpu.step(&mut bus);
+    assert_eq!(cycles, 4);
+    assert_eq!(cpu.pc, 2);
+}
+
+#[test]
+fn cpu_step_advances_timer_without_external_bus_tick() {
+    let (mut cpu, mut bus) = setup(&[0x00, 0x00, 0x00, 0x00]); // 4x NOP
+
+    bus.write8(0xFF05, 0x00); // TIMA
+    bus.write8(0xFF07, 0x05); // enable timer at 16-cycle period
+
+    for _ in 0..4 {
+        let cycles = cpu.step(&mut bus);
+        assert_eq!(cycles, 4);
+    }
+
+    assert_eq!(bus.read8(0xFF05), 0x01);
 }

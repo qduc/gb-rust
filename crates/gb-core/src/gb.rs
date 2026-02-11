@@ -8,9 +8,7 @@ pub struct GameBoy {
 
 impl GameBoy {
     pub fn step(&mut self) -> u32 {
-        let cycles = self.cpu.step(&mut self.bus);
-        self.bus.tick(cycles);
-        cycles
+        self.cpu.step(&mut self.bus)
     }
 
     pub fn run_frame(&mut self) {

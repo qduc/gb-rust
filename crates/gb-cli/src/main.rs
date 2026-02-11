@@ -180,7 +180,7 @@ fn parse_suite_args(args: &[String]) -> Result<SuiteArgs, String> {
     let mut rom_dir = PathBuf::from("roms");
     let mut rom_paths: Vec<PathBuf> = Vec::new();
     let mut max_frames: Option<u64> = None;
-    let mut max_cycles: Option<u64> = Some(50_000_000);
+    let mut max_cycles: Option<u64> = Some(100_000_000);
     let mut pass_text = vec!["passed".to_string()];
     let mut fail_text = vec!["failed".to_string(), "fail".to_string()];
     let mut print_serial = false;

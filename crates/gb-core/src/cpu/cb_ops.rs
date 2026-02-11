@@ -26,6 +26,15 @@ fn cycles_for_target(r: R8) -> u32 {
     }
 }
 
+#[inline]
+fn bit_cycles_for_target(r: R8) -> u32 {
+    if matches!(r, R8::HlInd) {
+        12
+    } else {
+        8
+    }
+}
+
 // CB-prefixed (0xCBxx) instruction implementations
 pub fn exec(cpu: &mut Cpu, bus: &mut Bus, opcode: u8) -> u32 {
     let r = decode_r8(opcode);
@@ -93,7 +102,7 @@ pub fn exec(cpu: &mut Cpu, bus: &mut Bus, opcode: u8) -> u32 {
             cpu.set_flag(Flag::Z, (v & (1 << bit)) == 0);
             cpu.set_flag(Flag::N, false);
             cpu.set_flag(Flag::H, true);
-            cycles_for_target(r)
+            bit_cycles_for_target(r)
         }
         0x80..=0xBF => {
             // RES b,r

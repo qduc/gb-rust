@@ -619,7 +619,11 @@ pub fn exec(cpu: &mut Cpu, bus: &mut Bus, opcode: u8) -> u32 {
             } else {
                 cpu.set_hl(res);
             }
-            12
+            if opcode == 0xE8 {
+                16
+            } else {
+                12
+            }
         }
 
         0xF9 => {

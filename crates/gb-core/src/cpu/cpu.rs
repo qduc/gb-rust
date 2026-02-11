@@ -56,6 +56,9 @@ pub struct Cpu {
     pub halted: bool,
     /// Set by EI; IME becomes true after the following instruction completes.
     pub ei_pending: bool,
+    /// HALT bug latch: next opcode fetch reads at PC without incrementing it.
+    pub halt_bug: bool,
+    step_cycles: u32,
 }
 
 impl Cpu {
@@ -74,6 +77,8 @@ impl Cpu {
             ime: false,
             halted: false,
             ei_pending: false,
+            halt_bug: false,
+            step_cycles: 0,
         }
     }
 
@@ -90,23 +95,54 @@ impl Cpu {
         self.push16(bus, pc);
         self.pc = intr.vector();
 
-        20
+        self.finish_step(bus, 20)
+    }
+
+    #[inline]
+    fn tick_mcycle(&mut self, bus: &mut Bus) {
+        bus.tick(4);
+        self.step_cycles += 4;
+    }
+
+    #[inline]
+    fn tick_idle(&mut self, bus: &mut Bus, cycles: u32) {
+        debug_assert_eq!(cycles % 4, 0);
+        bus.tick(cycles);
+        self.step_cycles += cycles;
+    }
+
+    #[inline]
+    fn finish_step(&mut self, bus: &mut Bus, target_cycles: u32) -> u32 {
+        debug_assert_eq!(target_cycles % 4, 0);
+        if self.step_cycles < target_cycles {
+            self.tick_idle(bus, target_cycles - self.step_cycles);
+        }
+        debug_assert_eq!(self.step_cycles, target_cycles);
+        target_cycles
     }
 
     #[inline]
     pub fn read8(&mut self, bus: &mut Bus, addr: u16) -> u8 {
-        bus.read8(addr)
+        let v = bus.read8(addr);
+        self.tick_mcycle(bus);
+        v
     }
 
     #[inline]
     pub fn write8(&mut self, bus: &mut Bus, addr: u16, val: u8) {
-        bus.write8(addr, val)
+        bus.write8(addr, val);
+        self.tick_mcycle(bus);
     }
 
     #[inline]
     pub fn fetch8(&mut self, bus: &mut Bus) -> u8 {
-        let v = self.read8(bus, self.pc);
-        self.pc = self.pc.wrapping_add(1);
+        let addr = self.pc;
+        let v = self.read8(bus, addr);
+        if self.halt_bug {
+            self.halt_bug = false;
+        } else {
+            self.pc = self.pc.wrapping_add(1);
+        }
         v
     }
 
@@ -232,10 +268,13 @@ impl Cpu {
     }
 
     pub fn step(&mut self, bus: &mut Bus) -> u32 {
+        self.step_cycles = 0;
+
         let pending = pending_mask(bus.ie, bus.iflag);
 
         if self.halted {
             if pending == 0 {
+                self.tick_idle(bus, 4);
                 return 4;
             }
 
@@ -243,6 +282,7 @@ impl Cpu {
             if self.ime {
                 return self.service_interrupt(bus, pending);
             }
+            self.halt_bug = true;
         } else if self.ime && pending != 0 {
             return self.service_interrupt(bus, pending);
         }
@@ -263,7 +303,7 @@ impl Cpu {
             self.ime = true;
         }
 
-        cycles
+        self.finish_step(bus, cycles)
     }
 }
 
