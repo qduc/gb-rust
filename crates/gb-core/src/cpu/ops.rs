@@ -1,4 +1,5 @@
 use crate::bus::Bus;
+use crate::interrupt::pending_mask;
 
 use super::cpu::{Flag, R8};
 use super::Cpu;
@@ -90,7 +91,7 @@ pub fn exec(cpu: &mut Cpu, bus: &mut Bus, opcode: u8) -> u32 {
             // STOP; consume the following padding byte.
             let _ = cpu.fetch8(bus);
             cpu.halted = true;
-            4
+            8
         }
 
         // 16-bit loads
@@ -219,7 +220,13 @@ pub fn exec(cpu: &mut Cpu, bus: &mut Bus, opcode: u8) -> u32 {
 
         // 0x40..=0x7F: LD r,r' (incl (HL) cases) and HALT (0x76)
         0x76 => {
-            cpu.halted = true;
+            // HALT bug: when IME=0 and an interrupt is already pending, HALT does not
+            // enter the halted state and the next opcode fetch does not increment PC.
+            if !cpu.ime && pending_mask(bus.ie, bus.iflag) != 0 {
+                cpu.halt_bug = true;
+            } else {
+                cpu.halted = true;
+            }
             4
         }
         0x40..=0x7F => {

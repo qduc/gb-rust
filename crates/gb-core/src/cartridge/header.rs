@@ -4,9 +4,19 @@ pub enum CartridgeType {
     Mbc1,
     Mbc1Ram,
     Mbc1RamBattery,
+    Mbc2,
+    Mbc2Battery,
+    Mbc3TimerBattery,
+    Mbc3TimerRamBattery,
     Mbc3,
     Mbc3Ram,
     Mbc3RamBattery,
+    Mbc5,
+    Mbc5Ram,
+    Mbc5RamBattery,
+    Mbc5Rumble,
+    Mbc5RumbleRam,
+    Mbc5RumbleRamBattery,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,6 +29,10 @@ pub enum RomSize {
     Megabyte1,    // 32 banks
     Megabyte2,    // 64 banks
     Megabyte4,    // 128 banks
+    Megabyte8,    // 512 banks
+    Megabyte1_1,  // 72 banks
+    Megabyte1_2,  // 80 banks
+    Megabyte1_5,  // 96 banks
 }
 
 impl RomSize {
@@ -32,6 +46,10 @@ impl RomSize {
             RomSize::Megabyte1 => 32,
             RomSize::Megabyte2 => 64,
             RomSize::Megabyte4 => 128,
+            RomSize::Megabyte8 => 512,
+            RomSize::Megabyte1_1 => 72,
+            RomSize::Megabyte1_2 => 80,
+            RomSize::Megabyte1_5 => 96,
         }
     }
 
@@ -49,6 +67,10 @@ impl RomSize {
             0x05 => Ok(RomSize::Megabyte1),
             0x06 => Ok(RomSize::Megabyte2),
             0x07 => Ok(RomSize::Megabyte4),
+            0x08 => Ok(RomSize::Megabyte8),
+            0x52 => Ok(RomSize::Megabyte1_1),
+            0x53 => Ok(RomSize::Megabyte1_2),
+            0x54 => Ok(RomSize::Megabyte1_5),
             _ => Err(HeaderError::UnsupportedRomSize(byte)),
         }
     }
@@ -93,9 +115,19 @@ impl CartridgeType {
             0x01 => Ok(CartridgeType::Mbc1),
             0x02 => Ok(CartridgeType::Mbc1Ram),
             0x03 => Ok(CartridgeType::Mbc1RamBattery),
+            0x05 => Ok(CartridgeType::Mbc2),
+            0x06 => Ok(CartridgeType::Mbc2Battery),
+            0x0F => Ok(CartridgeType::Mbc3TimerBattery),
+            0x10 => Ok(CartridgeType::Mbc3TimerRamBattery),
             0x11 => Ok(CartridgeType::Mbc3),
             0x12 => Ok(CartridgeType::Mbc3Ram),
             0x13 => Ok(CartridgeType::Mbc3RamBattery),
+            0x19 => Ok(CartridgeType::Mbc5),
+            0x1A => Ok(CartridgeType::Mbc5Ram),
+            0x1B => Ok(CartridgeType::Mbc5RamBattery),
+            0x1C => Ok(CartridgeType::Mbc5Rumble),
+            0x1D => Ok(CartridgeType::Mbc5RumbleRam),
+            0x1E => Ok(CartridgeType::Mbc5RumbleRamBattery),
             _ => Err(HeaderError::UnsupportedCartridgeType(byte)),
         }
     }

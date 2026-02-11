@@ -6,6 +6,7 @@ fn make_banked_rom(bank_count: usize) -> Vec<u8> {
     let mut rom = vec![0u8; bank_count * 0x4000];
     for bank in 0..bank_count {
         rom[bank * 0x4000] = bank as u8;
+        rom[bank * 0x4000 + 1] = (bank >> 8) as u8;
     }
     // Set minimal header
     rom[0x0148] = match bank_count {
@@ -17,6 +18,7 @@ fn make_banked_rom(bank_count: usize) -> Vec<u8> {
         32 => 0x05,
         64 => 0x06,
         128 => 0x07,
+        512 => 0x08,
         _ => 0x00,
     };
     rom
@@ -265,6 +267,84 @@ fn mbc3_rom_bank_switches_and_bank0_maps_to_1() {
     // Selecting bank 0 should map to bank 1.
     bus.write8(0x2000, 0x00);
     assert_eq!(bus.read8(0x4000), 0x01);
+}
+
+#[test]
+fn mbc3_rtc_latch_and_tick_progression() {
+    let mut rom = make_banked_rom(2);
+    rom[0x0147] = 0x10; // MBC3 + Timer + RAM + Battery
+    rom[0x0149] = 0x03; // 32KB RAM
+
+    let cart = Cartridge::from_rom(rom).unwrap();
+    let mut bus = Bus::new(cart);
+
+    bus.write8(0x0000, 0x0A); // RAM/RTC enable
+
+    // Program 23:59:59 then tick one second and verify day carry.
+    bus.write8(0x4000, 0x08);
+    bus.write8(0xA000, 59);
+    bus.write8(0x4000, 0x09);
+    bus.write8(0xA000, 59);
+    bus.write8(0x4000, 0x0A);
+    bus.write8(0xA000, 23);
+
+    bus.tick(4_194_304);
+    bus.write8(0x4000, 0x08);
+    assert_eq!(bus.read8(0xA000), 0);
+    bus.write8(0x4000, 0x09);
+    assert_eq!(bus.read8(0xA000), 0);
+    bus.write8(0x4000, 0x0A);
+    assert_eq!(bus.read8(0xA000), 0);
+    bus.write8(0x4000, 0x0B);
+    assert_eq!(bus.read8(0xA000), 1);
+
+    // Latch snapshot should hold while live clock continues.
+    bus.write8(0x6000, 0x00);
+    bus.write8(0x6000, 0x01);
+    bus.tick(4_194_304);
+    bus.write8(0x4000, 0x08);
+    assert_eq!(bus.read8(0xA000), 0, "latched second stays stable");
+
+    bus.write8(0x6000, 0x00);
+    bus.write8(0x6000, 0x01);
+    assert_eq!(bus.read8(0xA000), 1, "new latch sees advanced second");
+
+    // Halt bit freezes progression.
+    bus.write8(0x4000, 0x0C);
+    bus.write8(0xA000, 0x40);
+    bus.tick(8_388_608);
+    bus.write8(0x6000, 0x00);
+    bus.write8(0x6000, 0x01);
+    bus.write8(0x4000, 0x08);
+    assert_eq!(bus.read8(0xA000), 1);
+}
+
+#[test]
+fn mbc5_rom_and_ram_bank_switching() {
+    let mut rom = make_banked_rom(512);
+    rom[0x0147] = 0x1B; // MBC5 + RAM + Battery
+    rom[0x0148] = 0x08; // 8MB ROM
+    rom[0x0149] = 0x03; // 32KB RAM
+
+    let cart = Cartridge::from_rom(rom).unwrap();
+    let mut bus = Bus::new(cart);
+
+    // Select ROM bank 0x101.
+    bus.write8(0x2000, 0x01);
+    bus.write8(0x3000, 0x01);
+    assert_eq!(bus.read8(0x4000), 0x01);
+    assert_eq!(bus.read8(0x4001), 0x01);
+
+    // RAM banking.
+    bus.write8(0x0000, 0x0A);
+    bus.write8(0x4000, 0x00);
+    bus.write8(0xA000, 0x11);
+    bus.write8(0x4000, 0x01);
+    bus.write8(0xA000, 0x22);
+    bus.write8(0x4000, 0x00);
+    assert_eq!(bus.read8(0xA000), 0x11);
+    bus.write8(0x4000, 0x01);
+    assert_eq!(bus.read8(0xA000), 0x22);
 }
 
 #[test]

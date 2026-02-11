@@ -282,7 +282,6 @@ impl Cpu {
             if self.ime {
                 return self.service_interrupt(bus, pending);
             }
-            self.halt_bug = true;
         } else if self.ime && pending != 0 {
             return self.service_interrupt(bus, pending);
         }

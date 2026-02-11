@@ -1,1 +1,3 @@
-// square, wave, noise channels
+pub mod noise;
+pub mod square;
+pub mod wave;

@@ -108,7 +108,8 @@ fn halt_with_pending_interrupt_and_ime_false_resumes_execution() {
 
     assert_eq!(cycles, 4);
     assert!(!cpu.halted);
-    assert_eq!(cpu.pc, 0);
+    assert_eq!(cpu.pc, 1);
+    assert!(!cpu.halt_bug);
     assert_ne!(bus.iflag & 0x01, 0);
 }
 
@@ -239,7 +240,8 @@ fn halt_bug_duplicates_next_opcode_fetch_when_ime_off_and_interrupt_pending() {
     let cycles = cpu.step(&mut bus);
     assert_eq!(cycles, 4);
     assert_eq!(cpu.pc, 1);
-    assert!(cpu.halted);
+    assert!(!cpu.halted);
+    assert!(cpu.halt_bug);
     assert_ne!(bus.iflag & 0x01, 0);
 
     let cycles = cpu.step(&mut bus);
@@ -264,7 +266,8 @@ fn halt_bug_with_multibyte_instruction() {
     let cycles = cpu.step(&mut bus);
     assert_eq!(cycles, 4);
     assert_eq!(cpu.pc, 1);
-    assert!(cpu.halted);
+    assert!(!cpu.halted);
+    assert!(cpu.halt_bug);
 
     // Step 2: Wake from HALT with bug
     // Opcode fetch at PC=1 reads 0x11 (LD DE) without incrementing PC
@@ -274,6 +277,38 @@ fn halt_bug_with_multibyte_instruction() {
     assert_eq!(cycles, 12); // LD DE, imm16 takes 12 cycles
     assert_eq!(cpu.de(), 0x3411); // Garbled: opcode byte 0x11 + 0x34
     assert_eq!(cpu.pc, 3); // PC is at 0x12 (what should have been high byte)
+}
+
+#[test]
+fn halt_wake_on_new_interrupt_does_not_trigger_halt_bug() {
+    // HALT ; NOP
+    let (mut cpu, mut bus) = setup(&[0x76, 0x00]);
+    cpu.ime = false;
+
+    let cycles = cpu.step(&mut bus);
+    assert_eq!(cycles, 4);
+    assert!(cpu.halted);
+    assert_eq!(cpu.pc, 1);
+
+    bus.ie = 0x01;
+    bus.iflag = 0x01;
+
+    let cycles = cpu.step(&mut bus);
+    assert_eq!(cycles, 4);
+    assert!(!cpu.halted);
+    assert!(!cpu.halt_bug);
+    assert_eq!(cpu.pc, 2);
+}
+
+#[test]
+fn stop_consumes_padding_byte_and_accounts_full_cycles() {
+    // STOP 0 ; NOP
+    let (mut cpu, mut bus) = setup(&[0x10, 0x00, 0x00]);
+
+    let cycles = cpu.step(&mut bus);
+    assert_eq!(cycles, 8);
+    assert!(cpu.halted);
+    assert_eq!(cpu.pc, 2);
 }
 
 #[test]

@@ -32,13 +32,20 @@
 - [x] `cargo test --workspace`
 
 ## Results
+- 2026-02-11 hardening update:
+  - Fixed runtime debug assertion panic in `Cpu::finish_step` by correcting `STOP` (`0x10`) timing to 8 cycles (it consumes the padding byte fetch).
+  - Corrected HALT bug trigger semantics: `HALT` now sets `halt_bug` only when `IME=0` and an interrupt is already pending at HALT execution time.
+  - Removed incorrect `halt_bug` arming on wake from a previously halted CPU when a new interrupt becomes pending with `IME=0`.
+  - Added CPU regression tests for:
+    - HALT wake without HALT bug (`halt_wake_on_new_interrupt_does_not_trigger_halt_bug`)
+    - STOP cycle accounting (`stop_consumes_padding_byte_and_accounts_full_cycles`)
+  - `gb-cli suite --rom-dir gb-test-roms --cycles 20000000` no longer triggers the CPU step-cycle assertion panic under stress.
 - Passing after fixes:
   - `instr_timing/instr_timing.gb`
   - `mem_timing/mem_timing.gb`
   - `mem_timing/individual/01-read_timing.gb`
   - `mem_timing/individual/02-write_timing.gb`
   - `mem_timing/individual/03-modify_timing.gb`
-  - all `cpu_instrs/individual/01..11`
 - Remaining (deferred):
-  - `halt_bug.gb`: times out without serial output after 500M+ cycles. HALT bug implementation is correct (unit tests pass for both single-byte and multi-byte instructions). The ROM executes HALT instructions and wakes properly, but never reaches the serial output phase. Likely requires CGB features or additional investigation. Not blocking for DMG emulation.
+  - `halt_bug.gb`: still times out without serial output (reproduced at 120M cycles). Targeted trace shows execution reaching `HALT` and then remaining halted at `PC=C07E` (`IME=0`) waiting for an interrupt that never becomes pending, indicating remaining interrupt-generation/timing dependency outside the CPU HALT bug trigger fix.
   - `interrupt_time/interrupt_time.gb`: CGB-only ROM (source declares `.define REQUIRE_CGB 1`). Requires CPU speed switching and CGB-specific features. Not applicable for DMG emulation.

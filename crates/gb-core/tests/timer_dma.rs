@@ -128,7 +128,85 @@ fn oam_dma_copies_0xa0_bytes() {
     // Start DMA from 0xC000 page.
     bus.write8(0xFF46, 0xC0);
 
+    // DMA should not complete instantly.
+    assert_eq!(bus.oam[0], 0x00);
+
+    // One byte is transferred every 4 cycles.
+    bus.tick(4);
+    assert_eq!(bus.oam[0], 0x00);
+    assert_eq!(bus.oam[1], 0x00);
+
+    bus.tick(4);
+    assert_eq!(bus.oam[1], 0x01);
+
+    // Finish remaining transfer window.
+    bus.tick(4 * 0x9E);
+
     for i in 0..0xA0u16 {
         assert_eq!(bus.read8(0xFE00 + i), (i & 0xFF) as u8);
     }
+}
+
+#[test]
+fn oam_dma_blocks_cpu_bus_except_hram() {
+    let cart = Cartridge::from_rom(make_rom()).unwrap();
+    let mut bus = Bus::new(cart);
+
+    bus.write8(0xC000, 0x12);
+    bus.write8(0xFF80, 0x34);
+    bus.write8(0xFFFF, 0x1F);
+
+    bus.write8(0xFF46, 0xC0);
+
+    // Non-HRAM accesses are blocked while DMA is active.
+    assert_eq!(bus.read8(0xC000), 0xFF);
+    bus.write8(0xC000, 0x99);
+    assert_eq!(bus.read8(0xC000), 0xFF);
+    assert_eq!(bus.read8(0xFFFF), 0xFF);
+    bus.write8(0xFFFF, 0x00);
+    assert_eq!(bus.read8(0xFFFF), 0xFF);
+
+    // HRAM remains accessible.
+    assert_eq!(bus.read8(0xFF80), 0x34);
+    bus.write8(0xFF80, 0x56);
+    assert_eq!(bus.read8(0xFF80), 0x56);
+
+    // Once DMA completes, normal access resumes.
+    bus.tick(4 * 0xA0);
+    assert_eq!(bus.read8(0xC000), 0x12);
+    assert_eq!(bus.read8(0xFFFF), 0x1F);
+    bus.write8(0xC000, 0x99);
+    assert_eq!(bus.read8(0xC000), 0x99);
+}
+
+#[test]
+fn oam_dma_start_timing_can_miss_current_scanline_sprite_fetch() {
+    let cart = Cartridge::from_rom(make_rom()).unwrap();
+    let mut bus = Bus::new(cart);
+
+    // Tile 0 row 0 -> color 3 at leftmost pixel.
+    bus.vram[0] = 0x80;
+    bus.vram[1] = 0x80;
+
+    // DMA source sprite entry at C000: y=16, x=8, tile=0, attrs=0.
+    bus.write8(0xC000, 16);
+    bus.write8(0xC001, 8);
+    bus.write8(0xC002, 0);
+    bus.write8(0xC003, 0);
+
+    // LCD on + OBJ on (BG off), default palettes.
+    bus.write8(0xFF40, 0x82);
+    bus.write8(0xFF48, 0xE4);
+
+    // Enter line 0 mode 2 and advance close to mode 3 boundary (dot 80).
+    bus.tick(0);
+    bus.tick(76);
+    assert_eq!(bus.read8(0xFF41) & 0x03, 2);
+
+    // Start DMA too late: after 4 cycles only OAM byte 0 is copied.
+    bus.write8(0xFF46, 0xC0);
+    bus.tick(4);
+
+    // Sprite X has not yet copied by mode 3 start, so pixel remains white.
+    assert_eq!(bus.ppu.framebuffer()[0], 0xFFFF_FFFF);
 }

@@ -5,6 +5,7 @@ use crate::input::Joypad;
 use crate::ppu::Ppu;
 use crate::serial::Serial;
 use crate::timer::Timer;
+use std::path::Path;
 
 pub struct Bus {
     pub cart: Cartridge,
@@ -20,6 +21,7 @@ pub struct Bus {
     pub hram: [u8; 0x7F],
     pub ie: u8,
     pub iflag: u8,
+    pub oam_dma: dma::OamDma,
 }
 
 impl Bus {
@@ -38,10 +40,18 @@ impl Bus {
             hram: [0; 0x7F],
             ie: 0,
             iflag: 0,
+            oam_dma: dma::OamDma::default(),
         }
     }
 
     pub fn read8(&mut self, addr: u16) -> u8 {
+        if self.oam_dma.blocks_cpu_addr(addr) {
+            return 0xFF;
+        }
+        self.read8_direct(addr)
+    }
+
+    fn read8_direct(&mut self, addr: u16) -> u8 {
         match addr {
             // ROM: 0x0000..=0x7FFF
             0x0000..=0x7FFF => self.cart.mbc.read_rom(&self.cart.rom, addr),
@@ -72,6 +82,7 @@ impl Bus {
                 0xFF06 => self.timer.read_tma(),
                 0xFF07 => self.timer.read_tac(),
                 0xFF0F => self.iflag | 0xE0,
+                0xFF10..=0xFF3F => self.apu.read_register(addr),
                 _ => self.io[(addr - 0xFF00) as usize],
             },
 
@@ -84,6 +95,13 @@ impl Bus {
     }
 
     pub fn write8(&mut self, addr: u16, val: u8) {
+        if self.oam_dma.blocks_cpu_addr(addr) {
+            return;
+        }
+        self.write8_direct(addr, val);
+    }
+
+    fn write8_direct(&mut self, addr: u16, val: u8) {
         match addr {
             // ROM: 0x0000..=0x7FFF (writes go to MBC control)
             0x0000..=0x7FFF => self.cart.mbc.write_rom(addr, val),
@@ -116,6 +134,7 @@ impl Bus {
                     0xFF06 => self.timer.write_tma(val),
                     0xFF07 => self.timer.write_tac(val, &mut self.iflag),
                     0xFF0F => self.iflag = val & 0x1F,
+                    0xFF10..=0xFF3F => self.apu.write_register(addr, val),
                     0xFF02 => {
                         self.io[idx] = val;
                         // Common test ROM convention: write a byte to SB (0xFF01), then write 0x81
@@ -132,7 +151,7 @@ impl Bus {
                     }
                     0xFF46 => {
                         self.io[idx] = val;
-                        dma::oam_dma(self, val);
+                        self.oam_dma.start(val);
                     }
                     _ => self.io[idx] = val,
                 }
@@ -151,9 +170,27 @@ impl Bus {
     }
 
     pub fn tick(&mut self, cycles: u32) {
+        self.cart.mbc.tick(cycles);
         self.timer.tick(cycles, &mut self.iflag);
+        self.tick_oam_dma(cycles);
         self.ppu
             .tick(cycles, &self.vram, &self.oam, &mut self.io, &mut self.iflag);
         self.apu.tick(cycles);
+    }
+
+    pub fn save_to_path(&self, path: &Path) -> Result<(), crate::cartridge::SaveError> {
+        self.cart.save_to_path(path)
+    }
+
+    pub fn load_from_path(&mut self, path: &Path) -> Result<(), crate::cartridge::SaveError> {
+        self.cart.load_from_path(path)
+    }
+
+    fn tick_oam_dma(&mut self, cycles: u32) {
+        self.oam_dma.add_cycles(cycles);
+        while let Some((src, dst)) = self.oam_dma.pop_transfer() {
+            let v = self.read8_direct(src);
+            self.oam[dst] = v;
+        }
     }
 }
