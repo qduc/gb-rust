@@ -90,7 +90,10 @@ pub fn exec(cpu: &mut Cpu, bus: &mut Bus, opcode: u8) -> u32 {
         0x10 => {
             // STOP; consume the following padding byte.
             let _ = cpu.fetch8(bus);
-            cpu.halted = true;
+
+            // On CGB, STOP is also used for the KEY1 speed-switch handshake.
+            cpu.halted = !bus.try_cgb_speed_switch();
+
             8
         }
 

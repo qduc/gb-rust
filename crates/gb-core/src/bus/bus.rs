@@ -7,8 +7,15 @@ use crate::serial::Serial;
 use crate::timer::Timer;
 use std::path::Path;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EmulationMode {
+    Dmg,
+    Cgb,
+}
+
 pub struct Bus {
     pub cart: Cartridge,
+    pub mode: EmulationMode,
     pub ppu: Ppu,
     pub apu: Apu,
     pub timer: Timer,
@@ -22,12 +29,23 @@ pub struct Bus {
     pub ie: u8,
     pub iflag: u8,
     pub oam_dma: dma::OamDma,
+
+    // CGB speed switch state (KEY1 / STOP handshake).
+    cgb_double_speed: bool,
+    cgb_speed_switch_prepare: bool,
 }
 
 impl Bus {
     pub fn new(cart: Cartridge) -> Self {
+        let mode = match cart.header.cgb_support {
+            crate::cartridge::header::CgbSupport::DmgOnly => EmulationMode::Dmg,
+            crate::cartridge::header::CgbSupport::CgbCompatible
+            | crate::cartridge::header::CgbSupport::CgbOnly => EmulationMode::Cgb,
+        };
+
         Self {
             cart,
+            mode,
             ppu: Ppu::new(),
             apu: Apu::new(),
             timer: Timer::new(),
@@ -41,7 +59,45 @@ impl Bus {
             ie: 0,
             iflag: 0,
             oam_dma: dma::OamDma::default(),
+            cgb_double_speed: false,
+            cgb_speed_switch_prepare: false,
         }
+    }
+
+    #[inline]
+    fn is_cgb(&self) -> bool {
+        self.mode == EmulationMode::Cgb
+    }
+
+    fn read_key1(&self) -> u8 {
+        if !self.is_cgb() {
+            return 0xFF;
+        }
+        let speed = if self.cgb_double_speed { 0x80 } else { 0x00 };
+        let prepare = if self.cgb_speed_switch_prepare {
+            0x01
+        } else {
+            0x00
+        };
+        speed | 0x7E | prepare
+    }
+
+    fn write_key1(&mut self, val: u8) {
+        if !self.is_cgb() {
+            return;
+        }
+        self.cgb_speed_switch_prepare = (val & 0x01) != 0;
+    }
+
+    /// Returns true if the CGB speed-switch handshake was performed.
+    pub fn try_cgb_speed_switch(&mut self) -> bool {
+        if !self.is_cgb() || !self.cgb_speed_switch_prepare {
+            return false;
+        }
+
+        self.cgb_speed_switch_prepare = false;
+        self.cgb_double_speed = !self.cgb_double_speed;
+        true
     }
 
     pub fn read8(&mut self, addr: u16) -> u8 {
@@ -83,6 +139,7 @@ impl Bus {
                 0xFF07 => self.timer.read_tac(),
                 0xFF0F => self.iflag | 0xE0,
                 0xFF10..=0xFF3F => self.apu.read_register(addr),
+                0xFF4D => self.read_key1(),
                 _ => self.io[(addr - 0xFF00) as usize],
             },
 
@@ -135,6 +192,7 @@ impl Bus {
                     0xFF07 => self.timer.write_tac(val, &mut self.iflag),
                     0xFF0F => self.iflag = val & 0x1F,
                     0xFF10..=0xFF3F => self.apu.write_register(addr, val),
+                    0xFF4D => self.write_key1(val),
                     0xFF02 => {
                         self.io[idx] = val;
                         // Common test ROM convention: write a byte to SB (0xFF01), then write 0x81

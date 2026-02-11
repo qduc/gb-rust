@@ -133,11 +133,33 @@ impl CartridgeType {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CgbSupport {
+    DmgOnly,
+    CgbCompatible,
+    CgbOnly,
+}
+
+impl CgbSupport {
+    fn from_byte(byte: u8) -> Self {
+        // Official values are 0x00 (DMG), 0x80 (CGB-compatible), 0xC0 (CGB-only).
+        // Some ROMs set additional bits, so we follow the common "bit 7/6" interpretation.
+        if (byte & 0xC0) == 0xC0 {
+            Self::CgbOnly
+        } else if (byte & 0x80) != 0 {
+            Self::CgbCompatible
+        } else {
+            Self::DmgOnly
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Header {
     pub cartridge_type: CartridgeType,
     pub rom_size: RomSize,
     pub ram_size: RamSize,
+    pub cgb_support: CgbSupport,
 }
 
 #[derive(Debug, Clone)]
@@ -157,11 +179,13 @@ impl Header {
         let cartridge_type = CartridgeType::from_byte(rom[0x0147])?;
         let rom_size = RomSize::from_byte(rom[0x0148])?;
         let ram_size = RamSize::from_byte(rom[0x0149])?;
+        let cgb_support = CgbSupport::from_byte(rom[0x0143]);
 
         Ok(Header {
             cartridge_type,
             rom_size,
             ram_size,
+            cgb_support,
         })
     }
 }
