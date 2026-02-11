@@ -17,7 +17,7 @@ const LIGHT: u32 = 0xFFAA_AAAA;
 const DARK: u32 = 0xFF55_5555;
 const BLACK: u32 = 0xFF00_0000;
 
-fn write_tile_row(vram: &mut [u8; 0x2000], tile: u8, row: u8, lo: u8, hi: u8) {
+fn write_tile_row(vram: &mut [u8], tile: u8, row: u8, lo: u8, hi: u8) {
     let base = (tile as usize) * 16 + (row as usize) * 2;
     vram[base] = lo;
     vram[base + 1] = hi;

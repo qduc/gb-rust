@@ -120,9 +120,9 @@ fn oam_dma_copies_0xa0_bytes() {
     let cart = Cartridge::from_rom(make_rom()).unwrap();
     let mut bus = Bus::new(cart);
 
-    // Populate WRAM at 0xC000..0xC09F.
+    // Populate WRAM at 0xC000..0xC09F with a pattern that makes byte 0 observable.
     for i in 0..0xA0u16 {
-        bus.write8(0xC000 + i, (i & 0xFF) as u8);
+        bus.write8(0xC000 + i, (i as u8).wrapping_add(1));
     }
 
     // Start DMA from 0xC000 page.
@@ -131,19 +131,20 @@ fn oam_dma_copies_0xa0_bytes() {
     // DMA should not complete instantly.
     assert_eq!(bus.oam[0], 0x00);
 
-    // One byte is transferred every 4 cycles.
+    // Hardware waits 1 M-cycle before the first byte transfer begins.
     bus.tick(4);
     assert_eq!(bus.oam[0], 0x00);
+
+    // Then one byte is transferred every 4 cycles.
+    bus.tick(4);
+    assert_eq!(bus.oam[0], 0x01);
     assert_eq!(bus.oam[1], 0x00);
 
-    bus.tick(4);
-    assert_eq!(bus.oam[1], 0x01);
-
     // Finish remaining transfer window.
-    bus.tick(4 * 0x9E);
+    bus.tick(4 * 0x9F);
 
     for i in 0..0xA0u16 {
-        assert_eq!(bus.read8(0xFE00 + i), (i & 0xFF) as u8);
+        assert_eq!(bus.read8(0xFE00 + i), (i as u8).wrapping_add(1));
     }
 }
 
@@ -171,8 +172,8 @@ fn oam_dma_blocks_cpu_bus_except_hram() {
     bus.write8(0xFF80, 0x56);
     assert_eq!(bus.read8(0xFF80), 0x56);
 
-    // Once DMA completes, normal access resumes.
-    bus.tick(4 * 0xA0);
+    // Once DMA completes (160 bytes + 1 M-cycle startup delay), normal access resumes.
+    bus.tick(4 * 0xA1);
     assert_eq!(bus.read8(0xC000), 0x12);
     assert_eq!(bus.read8(0xFFFF), 0x1F);
     bus.write8(0xC000, 0x99);
@@ -203,7 +204,7 @@ fn oam_dma_start_timing_can_miss_current_scanline_sprite_fetch() {
     bus.tick(76);
     assert_eq!(bus.read8(0xFF41) & 0x03, 2);
 
-    // Start DMA too late: after 4 cycles only OAM byte 0 is copied.
+    // Start DMA too late: after 4 cycles the startup delay hasn't elapsed, so no bytes are copied.
     bus.write8(0xFF46, 0xC0);
     bus.tick(4);
 

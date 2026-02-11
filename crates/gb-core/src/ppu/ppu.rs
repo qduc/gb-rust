@@ -172,6 +172,18 @@ impl Ppu {
     pub fn clear_frame_ready(&mut self) {
         self.frame_ready = false;
     }
+
+    pub fn current_mode(&self) -> u8 {
+        self.mode
+    }
+
+    pub fn current_ly(&self) -> u8 {
+        self.ly
+    }
+
+    pub fn current_dots(&self) -> u32 {
+        self.dots
+    }
 }
 
 impl Default for Ppu {

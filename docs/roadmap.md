@@ -77,8 +77,8 @@ Boundary summary:
 - [ ] Not yet at full DMG compatibility sign-off.
 - Known caveats:
   - `halt_bug.gb` is passed and handled correctly in `gb-cli` via VRAM scraping.
-  - `oam_bug` suite is currently failing (7/9 failed); implementation lacks hardware-exact OAM corruption behavior.
-  - `interrupt_time.gb` fails; indicates subtle timing issues in interrupt servicing or LCDC interaction.
+  - `oam_bug` suite is partially fixed. As of 2026-02-11, `2-causes`, `3-non_causes`, `4-scanline_timing`, `5-timing_bug`, and `6-timing_no_bug` pass; `1-lcd_sync` fails and `7-timing_effect` / `8-instr_effect` still do not complete with PASS output.
+  - `interrupt_time.gb` is CGB-only and tracked in Milestone B.
   - `dmg_sound` ROMs have mixed results; APU functional but lacking full hardware parity.
   - CGB-only behavior (Double Speed, Banking) foundational work is complete, but expansion is ongoing.
 
@@ -95,13 +95,13 @@ Execution order is strict:
 3. [ ] CPU/Timing Stability (High Accuracy)
 - [x] Add VRAM-based PASS/FAIL detection for on-screen reporting ROMs (e.g., `halt_bug.gb`)
 - [ ] Investigate and fix remaining HALT timing discrepancies and hardware-exact OAM corruption (`oam_bug` suite)
-- [ ] Fix sub-instruction timing issues seen in `interrupt_time.gb`
+- [ ] Fix remaining sub-instruction timing issues relevant to DMG compatibility
 - [x] Keep HALT/timing behavior stable under full suite stress (no debug assertions/panics)
 - [x] Re-run full DMG ROM suite with default cap and ensure no regressions
 4. [ ] DMA/PPU Accuracy (High Accuracy)
 - [x] Model timed OAM DMA and CPU bus restrictions (currently basic implementation)
-- [ ] Account for 1-MCycle OAM DMA startup delay and specific register blocking windows
-- [ ] Add tests for edge timing interactions that impact game compatibility (e.g., mid-scanline register writes)
+- [x] Account for 1-MCycle OAM DMA startup delay and specific register blocking windows
+- [x] Add tests for edge timing interactions that impact game compatibility (e.g., mid-scanline register writes)
 5. [x] Milestone A Exit Gate
 - [x] `cargo fmt --all`
 - [x] `cargo clippy --workspace --all-targets -- -D warnings`
@@ -118,7 +118,7 @@ Ordered CGB phases:
 - [ ] Phase 15: CGB audio/timing stabilization and frontend validation
 
 CGB ROM strategy (must be tracked per phase):
-- [ ] Keep a pinned CGB ROM manifest in docs with expected status per ROM (`pass`/`fail`/`deferred`).
+- [ ] Keep a pinned CGB ROM manifest in docs with expected status per ROM (`pass`/`fail`/`deferred`): [cgb-rom-manifest](cgb-rom-manifest.md)
 - [ ] Start with targeted mooneye CGB acceptance tests for the phase feature under development.
 - [ ] Add blargg CGB-sensitive ROMs (including CGB sound/timing) once corresponding subsystems land.
 - [ ] Require phase-local ROM pass evidence before advancing to the next CGB phase.

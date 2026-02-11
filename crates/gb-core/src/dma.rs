@@ -8,6 +8,8 @@ pub struct OamDma {
     active: bool,
     source_base: u16,
     next_byte: u16,
+    /// Remaining cycles before the first byte transfer begins.
+    startup_delay: u32,
     cycle_budget: u32,
 }
 
@@ -16,6 +18,8 @@ impl OamDma {
         self.active = true;
         self.source_base = (page as u16) << 8;
         self.next_byte = 0;
+        // Hardware waits 1 M-cycle before the first copy begins.
+        self.startup_delay = OAM_DMA_CYCLES_PER_BYTE;
         self.cycle_budget = 0;
     }
 
@@ -35,7 +39,20 @@ impl OamDma {
     }
 
     pub fn pop_transfer(&mut self) -> Option<(u16, usize)> {
-        if !self.active || self.cycle_budget < OAM_DMA_CYCLES_PER_BYTE {
+        if !self.active {
+            return None;
+        }
+
+        if self.startup_delay > 0 {
+            let consume = self.startup_delay.min(self.cycle_budget);
+            self.startup_delay -= consume;
+            self.cycle_budget -= consume;
+            if self.startup_delay > 0 {
+                return None;
+            }
+        }
+
+        if self.cycle_budget < OAM_DMA_CYCLES_PER_BYTE {
             return None;
         }
 
@@ -47,6 +64,7 @@ impl OamDma {
 
         if self.next_byte >= OAM_DMA_BYTES {
             self.active = false;
+            self.startup_delay = 0;
             self.cycle_budget = 0;
         }
 

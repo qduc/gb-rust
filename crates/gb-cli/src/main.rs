@@ -407,7 +407,7 @@ fn decode_blargg_screen_char(tile_id: u8) -> u8 {
     }
 }
 
-fn scrape_bg_tilemap_text_lower(vram: &[u8; 0x2000], map_offset: usize) -> String {
+fn scrape_bg_tilemap_text_lower(vram: &[u8], map_offset: usize) -> String {
     // BG tilemap is 32x32 bytes. In DMG VRAM, maps live at:
     // - 0x9800..=0x9BFF -> offset 0x1800
     // - 0x9C00..=0x9FFF -> offset 0x1C00
@@ -436,7 +436,7 @@ fn scrape_all_bg_text_lower(bus: &Bus) -> String {
     format!("{t9800}\n{t9c00}")
 }
 
-fn scrape_bg_tilemap_text(vram: &[u8; 0x2000], map_offset: usize) -> String {
+fn scrape_bg_tilemap_text(vram: &[u8], map_offset: usize) -> String {
     const MAP_W: usize = 32;
     const MAP_H: usize = 32;
     let mut out: Vec<u8> = Vec::with_capacity(MAP_W * MAP_H + MAP_H);

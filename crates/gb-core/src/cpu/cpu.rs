@@ -105,6 +105,11 @@ impl Cpu {
     }
 
     #[inline]
+    pub(crate) fn tick_internal_mcycle(&mut self, bus: &mut Bus) {
+        self.tick_mcycle(bus);
+    }
+
+    #[inline]
     fn tick_idle(&mut self, bus: &mut Bus, cycles: u32) {
         debug_assert_eq!(cycles % 4, 0);
         bus.tick(cycles);
@@ -237,8 +242,10 @@ impl Cpu {
     #[inline]
     pub fn push16(&mut self, bus: &mut Bus, v: u16) {
         let [hi, lo] = v.to_be_bytes();
+        bus.trigger_oam_bug_idu_write(self.sp);
         self.sp = self.sp.wrapping_sub(1);
         self.write8(bus, self.sp, hi);
+        bus.trigger_oam_bug_idu_write(self.sp);
         self.sp = self.sp.wrapping_sub(1);
         self.write8(bus, self.sp, lo);
     }
@@ -247,6 +254,7 @@ impl Cpu {
     pub fn pop16(&mut self, bus: &mut Bus) -> u16 {
         let lo = self.read8(bus, self.sp);
         self.sp = self.sp.wrapping_add(1);
+        bus.trigger_oam_bug_idu_write(self.sp);
         let hi = self.read8(bus, self.sp);
         self.sp = self.sp.wrapping_add(1);
         u16::from_be_bytes([hi, lo])
