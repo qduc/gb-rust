@@ -79,12 +79,12 @@ Boundary summary:
   - `halt_bug.gb` is passed and handled correctly in `gb-cli` via VRAM scraping.
   - `oam_bug` suite is fully fixed and reports FULL PASS as of 2026-02-11.
   - `interrupt_time.gb` remains a Milestone B (CGB) target due to cycle-accurate interrupt latency requirements.
-  - `dmg_sound` ROMs have mixed results; APU functional but lacking full hardware parity.
+  - `dmg_sound` baseline is complete; APU functional for real games with some edge-case parity gaps deferred to Milestone B.
   - CGB-only behavior (Double Speed, Banking) foundational work is complete, but expansion is ongoing.
 
 ## 12) Milestone A Backlog (Complete Before Any CGB Work)
 Execution order is strict:
-1. [x] Audio / APU
+1. [x] Audio / APU ([phase-11-apu-dmg-baseline](phases/phase-11-apu-dmg-baseline.md))
 - [x] Replace APU stub with real DMG APU implementation (channels, frame sequencer, mixing, timing)
 - [x] Add APU correctness tests using `dmg_sound` ROM expectations
 - [x] Verify stable SDL audio output under long-running gameplay
@@ -94,11 +94,11 @@ Execution order is strict:
 - [x] Add battery-backed SRAM/RTC persistence (`.sav`) load/store
 3. [ ] CPU/Timing Stability (High Accuracy)
 - [x] Add VRAM-based PASS/FAIL detection for on-screen reporting ROMs (e.g., `halt_bug.gb`)
-- [ ] Investigate and fix remaining HALT timing discrepancies and hardware-exact OAM corruption (`oam_bug` suite)
+- [x] Investigate and fix remaining HALT timing discrepancies and hardware-exact OAM corruption (`oam_bug` suite)
 - [ ] Fix remaining sub-instruction timing issues relevant to DMG compatibility
 - [x] Keep HALT/timing behavior stable under full suite stress (no debug assertions/panics)
 - [x] Re-run full DMG ROM suite with default cap and ensure no regressions
-4. [ ] DMA/PPU Accuracy (High Accuracy)
+4. [x] DMA/PPU Accuracy (High Accuracy)
 - [x] Model timed OAM DMA and CPU bus restrictions (currently basic implementation)
 - [x] Account for 1-MCycle OAM DMA startup delay and specific register blocking windows
 - [x] Add tests for edge timing interactions that impact game compatibility (e.g., mid-scanline register writes)
