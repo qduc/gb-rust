@@ -92,6 +92,7 @@ fn main() -> Result<(), String> {
     use gb_core::cpu::Cpu;
     use gb_core::gb::GameBoy;
     use gb_core::ppu::{LCD_HEIGHT, LCD_WIDTH};
+    use std::time::{Duration, Instant};
 
     use sdl2::event::Event;
     use sdl2::keyboard::Keycode;
@@ -108,11 +109,7 @@ fn main() -> Result<(), String> {
         .build()
         .map_err(|e| e.to_string())?;
 
-    let mut canvas = window
-        .into_canvas()
-        .present_vsync()
-        .build()
-        .map_err(|e| e.to_string())?;
+    let mut canvas = window.into_canvas().build().map_err(|e| e.to_string())?;
     canvas
         .set_logical_size(LCD_WIDTH as u32, LCD_HEIGHT as u32)
         .map_err(|e| e.to_string())?;
@@ -151,6 +148,9 @@ fn main() -> Result<(), String> {
         bus: Bus::new(cart),
     };
     init_dmg_post_boot(&mut gb);
+    const GB_FPS: f64 = 4_194_304.0 / (456.0 * 154.0);
+    let frame_duration = Duration::from_secs_f64(1.0 / GB_FPS);
+    let mut next_frame_at = Instant::now();
 
     let mut event_pump = sdl.event_pump()?;
 
@@ -185,6 +185,11 @@ fn main() -> Result<(), String> {
             }
         }
 
+        let now = Instant::now();
+        if now < next_frame_at {
+            std::thread::sleep(next_frame_at - now);
+        }
+
         gb.run_frame();
         audio::pump_apu_to_sdl(&mut gb.bus.apu, &audio_out)?;
         write_framebuffer_rgba8888_bytes(gb.bus.ppu.framebuffer(), &mut framebuffer_bytes);
@@ -198,6 +203,11 @@ fn main() -> Result<(), String> {
             .copy(&texture, None, None)
             .map_err(|e| e.to_string())?;
         canvas.present();
+
+        next_frame_at += frame_duration;
+        if next_frame_at < Instant::now() {
+            next_frame_at = Instant::now();
+        }
     }
 
     Ok(())
