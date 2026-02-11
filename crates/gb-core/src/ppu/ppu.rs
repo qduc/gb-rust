@@ -1,5 +1,7 @@
+use super::{Framebuffer, LCD_HEIGHT, LCD_WIDTH};
+
 pub struct Ppu {
-    pub framebuffer: [u32; 160 * 144],
+    framebuffer: Framebuffer,
     frame_ready: bool,
 
     // Phase 6: timing state (rendering comes later)
@@ -21,7 +23,7 @@ impl Ppu {
 
     pub fn new() -> Self {
         Self {
-            framebuffer: [0; 160 * 144],
+            framebuffer: [super::render::DMG_SHADES[0]; LCD_WIDTH * LCD_HEIGHT],
             frame_ready: false,
             dots: 0,
             ly: 0,
@@ -39,9 +41,23 @@ impl Ppu {
         self.frame_ready = false;
     }
 
-    pub fn tick(&mut self, mut cycles: u32, io: &mut [u8; 0x80], iflag: &mut u8) {
+    fn clear_framebuffer(&mut self) {
+        self.framebuffer.fill(super::render::DMG_SHADES[0]);
+    }
+
+    pub fn tick(
+        &mut self,
+        mut cycles: u32,
+        vram: &[u8; 0x2000],
+        oam: &[u8; 0xA0],
+        io: &mut [u8; 0x80],
+        iflag: &mut u8,
+    ) {
         let enabled = (io[Self::LCDC] & 0x80) != 0;
         if !enabled {
+            if self.lcd_enabled {
+                self.clear_framebuffer();
+            }
             self.lcd_enabled = false;
             self.dots = 0;
             self.ly = 0;
@@ -69,6 +85,7 @@ impl Ppu {
             // Mode transitions during visible lines.
             if self.ly < 144 {
                 if self.mode == 2 && self.dots == 80 {
+                    super::render::render_scanline(&mut self.framebuffer, self.ly, vram, oam, io);
                     self.set_mode(3, io, iflag);
                 } else if self.mode == 3 && self.dots == 252 {
                     self.set_mode(0, io, iflag);
@@ -144,6 +161,10 @@ impl Ppu {
         io[Self::STAT] = stat;
     }
 
+    pub fn framebuffer(&self) -> &Framebuffer {
+        &self.framebuffer
+    }
+
     pub fn frame_ready(&self) -> bool {
         self.frame_ready
     }
@@ -179,11 +200,37 @@ mod tests {
         let mut iflag = 0u8;
 
         io[LCDC] = 0x00; // LCD off
-        ppu.tick(456 * 10, &mut io, &mut iflag);
+        let vram = [0u8; 0x2000];
+        let oam = [0u8; 0xA0];
+        ppu.tick(456 * 10, &vram, &oam, &mut io, &mut iflag);
 
         assert_eq!(io[LY], 0);
         assert_eq!(mode(io[STAT]), 0);
         assert_eq!(iflag, 0);
+    }
+
+    #[test]
+    fn ppu_disabling_lcd_clears_framebuffer() {
+        let mut ppu = Ppu::new();
+        let mut io = [0u8; 0x80];
+        let mut iflag = 0u8;
+        let mut vram = [0u8; 0x2000];
+        let oam = [0u8; 0xA0];
+
+        // Render a non-white pixel first.
+        for row in 0..8 {
+            vram[16 + row * 2] = 0xFF;
+            vram[16 + row * 2 + 1] = 0xFF;
+        }
+        vram[0x1800] = 1;
+        io[0x47] = 0xE4;
+        io[LCDC] = 0x91;
+        ppu.tick(252, &vram, &oam, &mut io, &mut iflag);
+        assert_eq!(ppu.framebuffer()[0], 0xFF000000);
+
+        io[LCDC] = 0x00;
+        ppu.tick(4, &vram, &oam, &mut io, &mut iflag);
+        assert_eq!(ppu.framebuffer()[0], 0xFFFFFFFF);
     }
 
     #[test]
@@ -193,17 +240,19 @@ mod tests {
         let mut iflag = 0u8;
 
         io[LCDC] = 0x80; // LCD on
-        ppu.tick(0, &mut io, &mut iflag);
+        let vram = [0u8; 0x2000];
+        let oam = [0u8; 0xA0];
+        ppu.tick(0, &vram, &oam, &mut io, &mut iflag);
         assert_eq!(io[LY], 0);
         assert_eq!(mode(io[STAT]), 2);
 
-        ppu.tick(80, &mut io, &mut iflag);
+        ppu.tick(80, &vram, &oam, &mut io, &mut iflag);
         assert_eq!(mode(io[STAT]), 3);
 
-        ppu.tick(172, &mut io, &mut iflag);
+        ppu.tick(172, &vram, &oam, &mut io, &mut iflag);
         assert_eq!(mode(io[STAT]), 0);
 
-        ppu.tick(204, &mut io, &mut iflag);
+        ppu.tick(204, &vram, &oam, &mut io, &mut iflag);
         assert_eq!(io[LY], 1);
         assert_eq!(mode(io[STAT]), 2);
     }
@@ -215,7 +264,9 @@ mod tests {
         let mut iflag = 0u8;
 
         io[LCDC] = 0x80;
-        ppu.tick(456 * 144, &mut io, &mut iflag);
+        let vram = [0u8; 0x2000];
+        let oam = [0u8; 0xA0];
+        ppu.tick(456 * 144, &vram, &oam, &mut io, &mut iflag);
 
         assert_eq!(io[LY], 144);
         assert_eq!(mode(io[STAT]), 1);
@@ -225,6 +276,7 @@ mod tests {
     #[test]
     fn ppu_lyc_coincidence_sets_stat_and_interrupts_on_edge() {
         let mut ppu = Ppu::new();
+        let vram = [0u8; 0x2000];
         let mut io = [0u8; 0x80];
         let mut iflag = 0u8;
 
@@ -233,7 +285,8 @@ mod tests {
         io[STAT] = 0x40; // enable LYC=LY interrupt (bit 6)
 
         // Advance to LY=1
-        ppu.tick(456, &mut io, &mut iflag);
+        let oam = [0u8; 0xA0];
+        ppu.tick(456, &vram, &oam, &mut io, &mut iflag);
 
         assert_eq!(io[LY], 1);
         assert_ne!(io[STAT] & 0x04, 0); // coincidence flag
@@ -241,7 +294,186 @@ mod tests {
 
         // Still coincident; should not re-trigger every tick.
         iflag = 0;
-        ppu.tick(1, &mut io, &mut iflag);
+        ppu.tick(1, &vram, &oam, &mut io, &mut iflag);
         assert_eq!(iflag & 0x02, 0);
+    }
+
+    #[test]
+    fn ppu_exposes_framebuffer_and_renders_bg() {
+        use crate::ppu::{LCD_HEIGHT, LCD_WIDTH};
+
+        let mut ppu = Ppu::new();
+        let mut vram = [0u8; 0x2000];
+        let mut io = [0u8; 0x80];
+        let mut iflag = 0u8;
+
+        const TILE_1: usize = 16;
+
+        // Tile 1: all pixels color 3.
+        for row in 0..8 {
+            vram[TILE_1 + row * 2] = 0xFF;
+            vram[TILE_1 + row * 2 + 1] = 0xFF;
+        }
+        // BG map (0x9800): top-left tile is 1.
+        vram[0x1800] = 1;
+
+        io[0x47] = 0xE4; // identity palette mapping
+        io[0x40] = 0x91; // LCD on, BG on, unsigned tile data, 0x9800 map
+
+        assert_eq!(ppu.framebuffer().len(), LCD_WIDTH * LCD_HEIGHT);
+
+        // Render LY=0 scanline.
+        let oam = [0u8; 0xA0];
+        ppu.tick(0, &vram, &oam, &mut io, &mut iflag);
+        ppu.tick(80, &vram, &oam, &mut io, &mut iflag);
+        ppu.tick(172, &vram, &oam, &mut io, &mut iflag);
+
+        assert_eq!(ppu.framebuffer()[0], 0xFF000000);
+        assert_eq!(ppu.framebuffer()[8], 0xFFFFFFFF);
+    }
+
+    #[test]
+    fn ppu_framebuffer_updates_when_vram_changes() {
+        use crate::ppu::LCD_WIDTH;
+
+        let mut ppu = Ppu::new();
+        let mut vram = [0u8; 0x2000];
+        let mut io = [0u8; 0x80];
+        let mut iflag = 0u8;
+
+        const TILE_1: usize = 16;
+
+        // Tile 1: all pixels color 3.
+        for row in 0..8 {
+            vram[TILE_1 + row * 2] = 0xFF;
+            vram[TILE_1 + row * 2 + 1] = 0xFF;
+        }
+        vram[0x1800] = 1;
+
+        io[0x47] = 0xE4;
+        io[0x40] = 0x91;
+
+        // Render LY=0.
+        let oam = [0u8; 0xA0];
+        ppu.tick(0, &vram, &oam, &mut io, &mut iflag);
+        ppu.tick(80, &vram, &oam, &mut io, &mut iflag);
+        ppu.tick(172, &vram, &oam, &mut io, &mut iflag);
+        assert_eq!(ppu.framebuffer()[0], 0xFF000000);
+
+        // Finish line 0 to advance to LY=1.
+        ppu.tick(204, &vram, &oam, &mut io, &mut iflag);
+
+        // Change tile 1 to color 0 before rendering next scanline.
+        for row in 0..8 {
+            vram[TILE_1 + row * 2] = 0x00;
+            vram[TILE_1 + row * 2 + 1] = 0x00;
+        }
+
+        // Render LY=1.
+        ppu.tick(80, &vram, &oam, &mut io, &mut iflag);
+        ppu.tick(172, &vram, &oam, &mut io, &mut iflag);
+
+        assert_eq!(ppu.framebuffer()[LCD_WIDTH], 0xFFFFFFFF);
+    }
+
+    #[test]
+    fn ppu_scanline_uses_mode3_entry_state() {
+        let mut ppu = Ppu::new();
+        let mut vram = [0u8; 0x2000];
+        let mut io = [0u8; 0x80];
+        let mut iflag = 0u8;
+        let oam = [0u8; 0xA0];
+
+        // Tile 1 row produces color 1 on first pixel.
+        vram[16] = 0x80;
+        vram[17] = 0x00;
+        vram[0x1800] = 1;
+
+        io[0x40] = 0x91;
+        io[0x47] = 0xE4; // identity
+
+        ppu.tick(80, &vram, &oam, &mut io, &mut iflag);
+        // Change palette mid-mode-3; should not retroactively change rendered line.
+        io[0x47] = 0x1B;
+        ppu.tick(172, &vram, &oam, &mut io, &mut iflag);
+
+        assert_eq!(ppu.framebuffer()[0], 0xFFAAAAAA);
+    }
+
+    #[test]
+    fn ppu_renders_window_over_background() {
+        let mut ppu = Ppu::new();
+        let mut vram = [0u8; 0x2000];
+        let mut io = [0u8; 0x80];
+        let mut iflag = 0u8;
+
+        const TILE_1: usize = 16;
+
+        // Tile 1: all pixels color 3.
+        for row in 0..8 {
+            vram[TILE_1 + row * 2] = 0xFF;
+            vram[TILE_1 + row * 2 + 1] = 0xFF;
+        }
+
+        // Window map (0x9C00): top-left tile is 1.
+        vram[0x1C00] = 1;
+
+        io[0x47] = 0xE4; // identity palette mapping
+        io[0x4A] = 0; // WY
+        io[0x4B] = 7; // WX (7 => x=0)
+        io[0x40] = 0xF1; // LCD on, BG on, window on, unsigned tile data, window map 0x9C00
+
+        // Render LY=0 scanline.
+        let oam = [0u8; 0xA0];
+        ppu.tick(0, &vram, &oam, &mut io, &mut iflag);
+        ppu.tick(80, &vram, &oam, &mut io, &mut iflag);
+        ppu.tick(172, &vram, &oam, &mut io, &mut iflag);
+
+        // BG defaults to color 0 (white); window should overwrite it to color 3 (black).
+        assert_eq!(ppu.framebuffer()[0], 0xFF000000);
+    }
+
+    #[test]
+    fn ppu_window_respects_wx_wy_and_tilemap_selection() {
+        use crate::ppu::LCD_WIDTH;
+
+        let mut ppu = Ppu::new();
+        let mut vram = [0u8; 0x2000];
+        let mut io = [0u8; 0x80];
+        let mut iflag = 0u8;
+
+        const TILE_1: usize = 16;
+
+        // Tile 1: all pixels color 3.
+        for row in 0..8 {
+            vram[TILE_1 + row * 2] = 0xFF;
+            vram[TILE_1 + row * 2 + 1] = 0xFF;
+        }
+
+        // Window map (0x9800): top-left tile is 1.
+        vram[0x1800] = 1;
+        // BG map uses 0x9C00; leave it as tile 0 (white).
+
+        io[0x47] = 0xE4;
+        io[0x4A] = 1; // WY
+        io[0x4B] = 15; // WX (15 => x=8)
+        io[0x40] = 0xB9; // LCD on, BG on, window on, unsigned tile data, BG map 0x9C00, window map 0x9800
+
+        // Render LY=0 (window not active yet).
+        let oam = [0u8; 0xA0];
+        ppu.tick(0, &vram, &oam, &mut io, &mut iflag);
+        ppu.tick(80, &vram, &oam, &mut io, &mut iflag);
+        ppu.tick(172, &vram, &oam, &mut io, &mut iflag);
+        assert_eq!(ppu.framebuffer()[8], 0xFFFFFFFF);
+
+        // Advance to LY=1.
+        ppu.tick(204, &vram, &oam, &mut io, &mut iflag);
+
+        // Render LY=1 (window active; starts at x=8).
+        ppu.tick(80, &vram, &oam, &mut io, &mut iflag);
+        ppu.tick(172, &vram, &oam, &mut io, &mut iflag);
+
+        assert_eq!(ppu.framebuffer()[LCD_WIDTH + 7], 0xFFFFFFFF);
+        assert_eq!(ppu.framebuffer()[LCD_WIDTH + 8], 0xFF000000);
     }
 }
