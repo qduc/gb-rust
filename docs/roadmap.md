@@ -34,7 +34,7 @@ Use this checklist in order. Do not move to the next phase until the current one
 ## 6) PPU (Staged)
 Docs: [phase-06-ppu-mode-timing-ly-stat](phases/phase-06-ppu-mode-timing-ly-stat.md), [phase-06-ppu-render-background](phases/phase-06-ppu-render-background.md)
 - [x] Implement mode timing + LY/STAT
-- [x] Render background (in progress)
+- [x] Render background
 - [x] Render window
 - [x] Render sprites
 - [x] Expose framebuffer for frontends/tests
@@ -76,9 +76,11 @@ Boundary summary:
 - [x] Ready to run many real DMG games in `gb-sdl`/`gb-cli` for normal gameplay testing.
 - [ ] Not yet at full DMG compatibility sign-off.
 - Known caveats:
-- `halt_bug.gb` previously timed out in the CLI suite (it uses on-screen text rather than serial), but `gb-cli` now supports VRAM BG tilemap scraping to detect on-screen PASS/FAIL; use `--print-vram` to dump the scraped BG tilemap when a ROM fails or times out. Note: this is a detection/runner fix to make the suite meaningful for the ROM; underlying HALT timing behavior remains something to verify against hardware tests.
-- DMA/PPU behavior is improved (timed OAM DMA + CPU bus restrictions) but not fully hardware-exact in all edge cases.
-- CGB-only behavior remains out of Milestone A scope.
+  - `halt_bug.gb` is passed and handled correctly in `gb-cli` via VRAM scraping.
+  - `oam_bug` suite is currently failing (7/9 failed); implementation lacks hardware-exact OAM corruption behavior.
+  - `interrupt_time.gb` fails; indicates subtle timing issues in interrupt servicing or LCDC interaction.
+  - `dmg_sound` ROMs have mixed results; APU functional but lacking full hardware parity.
+  - CGB-only behavior (Double Speed, Banking) foundational work is complete, but expansion is ongoing.
 
 ## 12) Milestone A Backlog (Complete Before Any CGB Work)
 Execution order is strict:
@@ -90,14 +92,16 @@ Execution order is strict:
 - [x] Add missing mapper support needed by real games (MBC5, optionally MBC2)
 - [x] Implement MBC3 RTC registers/latching behavior (currently stubbed)
 - [x] Add battery-backed SRAM/RTC persistence (`.sav`) load/store
-3. [x] CPU/Timing Stability
-- [x] Add VRAM-based PASS/FAIL detection for on-screen reporting ROMs (e.g., `halt_bug.gb`) in `gb-cli` and provide `--print-vram` to aid debugging (implemented in `crates/gb-cli/src/main.rs`)
-- [x] Investigate and fix any remaining HALT timing discrepancies against hardware tests
+3. [ ] CPU/Timing Stability (High Accuracy)
+- [x] Add VRAM-based PASS/FAIL detection for on-screen reporting ROMs (e.g., `halt_bug.gb`)
+- [ ] Investigate and fix remaining HALT timing discrepancies and hardware-exact OAM corruption (`oam_bug` suite)
+- [ ] Fix sub-instruction timing issues seen in `interrupt_time.gb`
 - [x] Keep HALT/timing behavior stable under full suite stress (no debug assertions/panics)
 - [x] Re-run full DMG ROM suite with default cap and ensure no regressions
-4. [x] DMA/PPU Accuracy
-- [x] Model OAM DMA timing and CPU bus restrictions more accurately (currently immediate copy)
-- [x] Add tests for edge timing interactions that impact game compatibility
+4. [ ] DMA/PPU Accuracy (High Accuracy)
+- [x] Model timed OAM DMA and CPU bus restrictions (currently basic implementation)
+- [ ] Account for 1-MCycle OAM DMA startup delay and specific register blocking windows
+- [ ] Add tests for edge timing interactions that impact game compatibility (e.g., mid-scanline register writes)
 5. [x] Milestone A Exit Gate
 - [x] `cargo fmt --all`
 - [x] `cargo clippy --workspace --all-targets -- -D warnings`
@@ -108,7 +112,7 @@ Execution order is strict:
 Detailed plan doc: [phase-11-cgb-expansion-path](phases/phase-11-cgb-expansion-path.md)
 
 Ordered CGB phases:
-- [ ] Phase 12: CGB mode foundation (KEY1/speed switch, boot mode detection, CGB-only register gating) — [phase-12-cgb-mode-foundation](phases/phase-12-cgb-mode-foundation.md)
+- [x] Phase 12: CGB mode foundation (KEY1/speed switch, boot mode detection, CGB-only register gating) — [phase-12-cgb-mode-foundation](phases/phase-12-cgb-mode-foundation.md)
 - [ ] Phase 13: CGB memory model (VRAM bank switching, WRAM banking, HDMA/GDMA behavior)
 - [ ] Phase 14: CGB PPU features (attributes, palettes, priority rules, tile bank behavior)
 - [ ] Phase 15: CGB audio/timing stabilization and frontend validation
