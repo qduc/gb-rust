@@ -3,6 +3,7 @@ use crate::cartridge::Cartridge;
 use crate::dma;
 use crate::input::Joypad;
 use crate::ppu::Ppu;
+use crate::serial::Serial;
 use crate::timer::Timer;
 
 pub struct Bus {
@@ -11,6 +12,7 @@ pub struct Bus {
     pub apu: Apu,
     pub timer: Timer,
     pub input: Joypad,
+    pub serial: Serial,
     pub wram: [u8; 0x2000],
     pub vram: [u8; 0x2000],
     pub oam: [u8; 0xA0],
@@ -28,6 +30,7 @@ impl Bus {
             apu: Apu::new(),
             timer: Timer::new(),
             input: Joypad::new(),
+            serial: Serial::new(),
             wram: [0; 0x2000],
             vram: [0; 0x2000],
             oam: [0; 0xA0],
@@ -63,6 +66,7 @@ impl Bus {
 
             // IO Registers: 0xFF00..=0xFF7F
             0xFF00..=0xFF7F => match addr {
+                0xFF00 => self.input.read_joyp(),
                 0xFF04 => self.timer.read_div(),
                 0xFF05 => self.timer.read_tima(),
                 0xFF06 => self.timer.read_tma(),
@@ -106,11 +110,21 @@ impl Bus {
             0xFF00..=0xFF7F => {
                 let idx = (addr - 0xFF00) as usize;
                 match addr {
+                    0xFF00 => self.input.write_joyp(val),
                     0xFF04 => self.timer.write_div(&mut self.iflag),
                     0xFF05 => self.timer.write_tima(val),
                     0xFF06 => self.timer.write_tma(val),
                     0xFF07 => self.timer.write_tac(val, &mut self.iflag),
                     0xFF0F => self.iflag = val & 0x1F,
+                    0xFF02 => {
+                        self.io[idx] = val;
+                        // Common test ROM convention: write a byte to SB (0xFF01), then write 0x81
+                        // to SC (0xFF02) to "transfer" it out via the serial port.
+                        if (val & 0x80) != 0 {
+                            self.serial.on_transfer(self.io[0x01]);
+                            self.io[idx] = val & 0x7F; // clear transfer-start bit
+                        }
+                    }
                     0xFF41 => self.io[idx] = (self.io[idx] & 0x07) | (val & 0x78),
                     0xFF44 => {
                         self.io[idx] = 0;
@@ -132,9 +146,14 @@ impl Bus {
         }
     }
 
+    pub fn set_joypad_button(&mut self, button: crate::input::Button, pressed: bool) {
+        self.input.set_button(button, pressed, &mut self.iflag);
+    }
+
     pub fn tick(&mut self, cycles: u32) {
         self.timer.tick(cycles, &mut self.iflag);
-        self.ppu.tick(cycles, &mut self.io, &mut self.iflag);
+        self.ppu
+            .tick(cycles, &self.vram, &self.oam, &mut self.io, &mut self.iflag);
         self.apu.tick(cycles);
     }
 }

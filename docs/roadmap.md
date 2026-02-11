@@ -54,7 +54,7 @@ Docs: [phase-06-ppu-mode-timing-ly-stat](phases/phase-06-ppu-mode-timing-ly-stat
 - [x] Run `cargo fmt --all`
 - [x] Run `cargo clippy --workspace --all-targets -- -D warnings`
 - [x] Run `cargo test --workspace`
-- [ ] Commit one focused subsystem change at a time
+- [ ] Commit one focused subsystem change at a time (see [CONTRIBUTING.md](../CONTRIBUTING.md))
 
 ## 10) Final Hardening
 - [ ] Run test ROM suite in CLI

@@ -21,7 +21,7 @@ fn rejects_rom_shorter_than_declared_size() {
     match Cartridge::from_rom(rom) {
         Err(CartridgeError::RomTooSmall {
             declared: 0x8000,
-            actual: 0x4000
+            actual: 0x4000,
         }) => {}
         Err(_) => panic!("unexpected error"),
         Ok(_) => panic!("expected size error"),
