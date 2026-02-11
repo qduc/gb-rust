@@ -45,6 +45,9 @@ Primary test target is `gb-core`.
 
 Execute `cargo test --workspace` locally before pushing.
 
+## Tooling updates
+- `gb-cli` now supports **VRAM BG tilemap scraping** to detect PASS/FAIL for ROMs that render results on-screen rather than via serial (example: `halt_bug.gb`). A `--print-vram` flag was added to print scraped BG tilemap text on FAIL/TIMEOUT to aid debugging. Implementation and tests live in `crates/gb-cli/src/main.rs`.
+
 ## Phase Workflow (Required)
 Before implementing any phase, create a short plan document in `docs/phases/` with:
 - scope (exact files/modules),

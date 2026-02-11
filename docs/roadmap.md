@@ -76,7 +76,7 @@ Boundary summary:
 - [x] Ready to run many real DMG games in `gb-sdl`/`gb-cli` for normal gameplay testing.
 - [ ] Not yet at full DMG compatibility sign-off.
 - Known caveats:
-- `halt_bug.gb` still times out and remains the primary DMG hardening blocker.
+- `halt_bug.gb` previously timed out in the CLI suite (it uses on-screen text rather than serial), but `gb-cli` now supports VRAM BG tilemap scraping to detect on-screen PASS/FAIL; use `--print-vram` to dump the scraped BG tilemap when a ROM fails or times out. Note: this is a detection/runner fix to make the suite meaningful for the ROM; underlying HALT timing behavior remains something to verify against hardware tests.
 - DMA/PPU behavior is improved (timed OAM DMA + CPU bus restrictions) but not fully hardware-exact in all edge cases.
 - CGB-only behavior remains out of Milestone A scope.
 
@@ -91,7 +91,8 @@ Execution order is strict:
 - [x] Implement MBC3 RTC registers/latching behavior (currently stubbed)
 - [x] Add battery-backed SRAM/RTC persistence (`.sav`) load/store
 3. [ ] CPU/Timing Stability
-- [ ] Investigate and fix `halt_bug.gb` timeout to deterministic completion
+- [x] Add VRAM-based PASS/FAIL detection for on-screen reporting ROMs (e.g., `halt_bug.gb`) in `gb-cli` and provide `--print-vram` to aid debugging (implemented in `crates/gb-cli/src/main.rs`)
+- [ ] Investigate and fix any remaining HALT timing discrepancies against hardware tests
 - [x] Keep HALT/timing behavior stable under full suite stress (no debug assertions/panics)
 - [ ] Re-run full DMG ROM suite with default cap and ensure no regressions
 4. [ ] DMA/PPU Accuracy

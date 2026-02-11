@@ -1,2 +1,34 @@
-/target
-/roms
+# Rust / Cargo
+# See https://doc.rust-lang.org/cargo/ for more information
+
+# Build output
+/target/
+
+# Project-specific (keep ROMs out of the repo)
+/roms/
+*.gb
+
+# Backup files
+**/*.rs.bk
+
+# If you're building a binary, consider checking in Cargo.lock
+# (comment out the next line to track it)
+# Cargo.lock
+
+# Caches and generated files
+/.cargo/
+coverage/
+*.profraw
+
+# IDEs and editors
+.vscode/
+.idea/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor swap/backup files
+*~
+*.swp

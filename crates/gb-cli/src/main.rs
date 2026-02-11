@@ -24,6 +24,7 @@ struct RunArgs {
     trace_ppu: bool,
     log_serial: bool,
     print_serial: bool,
+    print_vram: bool,
 }
 
 #[derive(Debug)]
@@ -35,6 +36,7 @@ struct SuiteArgs {
     pass_text: Vec<String>,
     fail_text: Vec<String>,
     print_serial: bool,
+    print_vram: bool,
 }
 
 #[derive(Debug)]
@@ -43,6 +45,7 @@ struct SelfTestArgs {
     pass_text: Vec<String>,
     fail_text: Vec<String>,
     print_serial: bool,
+    print_vram: bool,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -91,6 +94,7 @@ Suite pass/fail detection:\n\
   - Marks FAIL if output contains any --fail-text (default: 'failed', 'fail').\n\
   - Otherwise stops at limits and marks TIMEOUT.\n"
     );
+    eprintln!("  --print-vram    Print scraped BG tilemap text on FAIL/TIMEOUT.");
 }
 
 fn parse_args() -> Result<Command, String> {
@@ -127,6 +131,7 @@ fn parse_run_args(args: &[String]) -> Result<RunArgs, String> {
     let mut trace_ppu = false;
     let mut log_serial = false;
     let mut print_serial = false;
+    let mut print_vram = false;
 
     while let Some(arg) = it.next() {
         match arg.as_str() {
@@ -140,6 +145,7 @@ fn parse_run_args(args: &[String]) -> Result<RunArgs, String> {
             "--trace-ppu" => trace_ppu = true,
             "--log-serial" => log_serial = true,
             "--print-serial" => print_serial = true,
+            "--print-vram" => print_vram = true,
             "--frames" => {
                 let v = it
                     .next()
@@ -173,6 +179,7 @@ fn parse_run_args(args: &[String]) -> Result<RunArgs, String> {
         trace_ppu,
         log_serial,
         print_serial,
+        print_vram,
     })
 }
 
@@ -184,6 +191,7 @@ fn parse_suite_args(args: &[String]) -> Result<SuiteArgs, String> {
     let mut pass_text = vec!["passed".to_string()];
     let mut fail_text = vec!["failed".to_string(), "fail".to_string()];
     let mut print_serial = false;
+    let mut print_vram = false;
 
     let mut it = args.iter();
     while let Some(arg) = it.next() {
@@ -229,6 +237,7 @@ fn parse_suite_args(args: &[String]) -> Result<SuiteArgs, String> {
                 fail_text.push(v.to_string());
             }
             "--print-serial" => print_serial = true,
+            "--print-vram" => print_vram = true,
             _ if arg.starts_with('-') => return Err(format!("unknown flag: {arg}")),
             _ => rom_paths.push(PathBuf::from(arg)),
         }
@@ -242,6 +251,7 @@ fn parse_suite_args(args: &[String]) -> Result<SuiteArgs, String> {
         pass_text,
         fail_text,
         print_serial,
+        print_vram,
     })
 }
 
@@ -250,6 +260,7 @@ fn parse_self_test_args(args: &[String]) -> Result<SelfTestArgs, String> {
     let mut pass_text = vec!["passed".to_string()];
     let mut fail_text = vec!["failed".to_string(), "fail".to_string()];
     let mut print_serial = false;
+    let mut print_vram = false;
 
     let mut it = args.iter();
     while let Some(arg) = it.next() {
@@ -280,6 +291,7 @@ fn parse_self_test_args(args: &[String]) -> Result<SelfTestArgs, String> {
                 fail_text.push(v.to_string());
             }
             "--print-serial" => print_serial = true,
+            "--print-vram" => print_vram = true,
             _ if arg.starts_with('-') => return Err(format!("unknown flag: {arg}")),
             _ => return Err(format!("unexpected positional arg: {arg}")),
         }
@@ -290,6 +302,7 @@ fn parse_self_test_args(args: &[String]) -> Result<SelfTestArgs, String> {
         pass_text,
         fail_text,
         print_serial,
+        print_vram,
     })
 }
 
@@ -383,12 +396,74 @@ fn contains_any(haystack_lower: &str, needles: &[String]) -> bool {
         .any(|n| !n.is_empty() && haystack_lower.contains(&n.to_ascii_lowercase()))
 }
 
+fn decode_blargg_screen_char(tile_id: u8) -> u8 {
+    // Some GB test ROMs display ASCII directly by putting character codes in the BG tilemap.
+    // Many also set the high bit; masking with 0x7F matches common conventions.
+    let c = tile_id & 0x7F;
+    if (0x20..=0x7E).contains(&c) {
+        c
+    } else {
+        b' '
+    }
+}
+
+fn scrape_bg_tilemap_text_lower(vram: &[u8; 0x2000], map_offset: usize) -> String {
+    // BG tilemap is 32x32 bytes. In DMG VRAM, maps live at:
+    // - 0x9800..=0x9BFF -> offset 0x1800
+    // - 0x9C00..=0x9FFF -> offset 0x1C00
+    const MAP_W: usize = 32;
+    const MAP_H: usize = 32;
+    const MAP_SIZE: usize = MAP_W * MAP_H;
+
+    let mut out: Vec<u8> = Vec::with_capacity(MAP_SIZE + MAP_H);
+    for y in 0..MAP_H {
+        for x in 0..MAP_W {
+            let i = y * MAP_W + x;
+            let tile_id = vram[map_offset + i];
+            out.push(decode_blargg_screen_char(tile_id));
+        }
+        out.push(b'\n');
+    }
+    String::from_utf8_lossy(&out).to_ascii_lowercase()
+}
+
+fn scrape_all_bg_text_lower(bus: &Bus) -> String {
+    // Try both BG tilemaps. Some ROMs use LCDC bit3 to pick one; others might write either.
+    let t9800 = scrape_bg_tilemap_text_lower(&bus.vram, 0x1800);
+    let t9c00 = scrape_bg_tilemap_text_lower(&bus.vram, 0x1C00);
+    // Keep it simple: concatenate so substring search can hit either.
+    // (Separators are spaces/newlines to avoid accidentally concatenating words.)
+    format!("{t9800}\n{t9c00}")
+}
+
+fn scrape_bg_tilemap_text(vram: &[u8; 0x2000], map_offset: usize) -> String {
+    const MAP_W: usize = 32;
+    const MAP_H: usize = 32;
+    let mut out: Vec<u8> = Vec::with_capacity(MAP_W * MAP_H + MAP_H);
+    for y in 0..MAP_H {
+        for x in 0..MAP_W {
+            let i = y * MAP_W + x;
+            let tile_id = vram[map_offset + i];
+            out.push(decode_blargg_screen_char(tile_id));
+        }
+        out.push(b'\n');
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+fn scrape_all_bg_text(bus: &Bus) -> String {
+    let t9800 = scrape_bg_tilemap_text(&bus.vram, 0x1800);
+    let t9c00 = scrape_bg_tilemap_text(&bus.vram, 0x1C00);
+    format!("{t9800}\n{t9c00}")
+}
+
 fn run_for_serial_result(
     cart: Cartridge,
     max_frames: Option<u64>,
     max_cycles: Option<u64>,
     pass_text: &[String],
     fail_text: &[String],
+    print_vram: bool,
 ) -> (RomResult, Vec<u8>, u64, u64) {
     let mut gb = GameBoy {
         cpu: Cpu::new(),
@@ -402,6 +477,26 @@ fn run_for_serial_result(
 
     loop {
         if max_frames.is_some_and(|m| frames >= m) || max_cycles.is_some_and(|m| cycles >= m) {
+            // Last-chance VRAM scrape: some ROMs (e.g. blargg halt_bug.gb) report results on-screen.
+            let screen_lower = scrape_all_bg_text_lower(&gb.bus);
+            if contains_any(&screen_lower, fail_text) {
+                if print_vram {
+                    println!(
+                        "--- VRAM BG tilemap (on FAIL) ---\n{}",
+                        scrape_all_bg_text(&gb.bus)
+                    );
+                }
+                return (RomResult::Fail, output, frames, cycles);
+            }
+            if contains_any(&screen_lower, pass_text) {
+                return (RomResult::Pass, output, frames, cycles);
+            }
+            if print_vram {
+                println!(
+                    "--- VRAM BG tilemap (on TIMEOUT) ---\n{}",
+                    scrape_all_bg_text(&gb.bus)
+                );
+            }
             return (RomResult::Timeout, output, frames, cycles);
         }
 
@@ -412,6 +507,12 @@ fn run_for_serial_result(
             output.extend_from_slice(&new);
             let out_lower = String::from_utf8_lossy(&output).to_ascii_lowercase();
             if contains_any(&out_lower, fail_text) {
+                if print_vram {
+                    println!(
+                        "--- VRAM BG tilemap (on FAIL) ---\n{}",
+                        scrape_all_bg_text(&gb.bus)
+                    );
+                }
                 return (RomResult::Fail, output, frames, cycles);
             }
             if contains_any(&out_lower, pass_text) {
@@ -422,6 +523,24 @@ fn run_for_serial_result(
         if gb.bus.ppu.frame_ready() {
             frames += 1;
             gb.bus.ppu.clear_frame_ready();
+
+            // VRAM fallback: check for on-screen "Passed"/"Failed" text.
+            // Keep it cheap-ish: check early frames and then every few frames.
+            if frames <= 3 || frames.is_multiple_of(5) {
+                let screen_lower = scrape_all_bg_text_lower(&gb.bus);
+                if contains_any(&screen_lower, fail_text) {
+                    if print_vram {
+                        println!(
+                            "--- VRAM BG tilemap (on FAIL) ---\n{}",
+                            scrape_all_bg_text(&gb.bus)
+                        );
+                    }
+                    return (RomResult::Fail, output, frames, cycles);
+                }
+                if contains_any(&screen_lower, pass_text) {
+                    return (RomResult::Pass, output, frames, cycles);
+                }
+            }
         }
     }
 }
@@ -503,6 +622,12 @@ fn run_single(args: RunArgs) -> Result<i32, String> {
         if args.max_frames.is_some_and(|m| frames >= m)
             || args.max_cycles.is_some_and(|m| cycles >= m)
         {
+            if args.print_vram {
+                println!(
+                    "--- VRAM BG tilemap (on TIMEOUT) ---\n{}",
+                    scrape_all_bg_text(&gb.bus)
+                );
+            }
             break;
         }
 
@@ -627,6 +752,7 @@ fn run_suite(args: SuiteArgs) -> Result<i32, String> {
             args.max_cycles,
             &args.pass_text,
             &args.fail_text,
+            args.print_vram,
         );
 
         match res {
@@ -668,6 +794,7 @@ fn run_self_test(args: SelfTestArgs) -> Result<i32, String> {
         args.max_cycles,
         &args.pass_text,
         &args.fail_text,
+        args.print_vram,
     );
 
     println!(
@@ -701,5 +828,42 @@ fn main() {
             print_usage();
             std::process::exit(1);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn vram_scrape_finds_passed_in_bg_map() {
+        let mut vram = [0u8; 0x2000];
+        // Write "Passed" into the first row of the 0x9800 BG map.
+        let s = b"Passed";
+        for (i, &b) in s.iter().enumerate() {
+            vram[0x1800 + i] = b;
+        }
+        let lower = scrape_bg_tilemap_text_lower(&vram, 0x1800);
+        assert!(lower.contains("passed"));
+    }
+
+    #[test]
+    fn vram_scrape_masks_high_bit() {
+        let mut vram = [0u8; 0x2000];
+        // 0xD0 & 0x7F = 0x50 = 'P'
+        vram[0x1800] = 0xD0;
+        let lower = scrape_bg_tilemap_text_lower(&vram, 0x1800);
+        assert!(lower.starts_with('p'));
+    }
+
+    #[test]
+    fn vram_scrape_preserves_case() {
+        let mut vram = [0u8; 0x2000];
+        let s = b"Passed";
+        for (i, &b) in s.iter().enumerate() {
+            vram[0x1800 + i] = b;
+        }
+        let t = scrape_bg_tilemap_text(&vram, 0x1800);
+        assert!(t.contains("Passed"));
     }
 }
