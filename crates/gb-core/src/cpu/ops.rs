@@ -152,6 +152,7 @@ pub fn exec(cpu: &mut Cpu, bus: &mut Bus, opcode: u8) -> u32 {
         0x22 => {
             let addr = cpu.hl();
             cpu.write8(bus, addr, cpu.a);
+            bus.trigger_oam_bug_idu_write(addr);
             cpu.set_hl(addr.wrapping_add(1));
             8
         }
@@ -165,6 +166,7 @@ pub fn exec(cpu: &mut Cpu, bus: &mut Bus, opcode: u8) -> u32 {
         0x32 => {
             let addr = cpu.hl();
             cpu.write8(bus, addr, cpu.a);
+            bus.trigger_oam_bug_idu_write(addr);
             cpu.set_hl(addr.wrapping_sub(1));
             8
         }
@@ -278,58 +280,58 @@ pub fn exec(cpu: &mut Cpu, bus: &mut Bus, opcode: u8) -> u32 {
 
         // INC/DEC rr
         0x03 => {
-            cpu.tick_internal_mcycle(bus);
             let before = cpu.bc();
             bus.trigger_oam_bug_idu_write(before);
+            cpu.tick_internal_mcycle(bus);
             cpu.set_bc(before.wrapping_add(1));
             8
         }
         0x13 => {
-            cpu.tick_internal_mcycle(bus);
             let before = cpu.de();
             bus.trigger_oam_bug_idu_write(before);
+            cpu.tick_internal_mcycle(bus);
             cpu.set_de(before.wrapping_add(1));
             8
         }
         0x23 => {
-            cpu.tick_internal_mcycle(bus);
             let before = cpu.hl();
             bus.trigger_oam_bug_idu_write(before);
+            cpu.tick_internal_mcycle(bus);
             cpu.set_hl(before.wrapping_add(1));
             8
         }
         0x33 => {
-            cpu.tick_internal_mcycle(bus);
             let before = cpu.sp;
             bus.trigger_oam_bug_idu_write(before);
+            cpu.tick_internal_mcycle(bus);
             cpu.sp = before.wrapping_add(1);
             8
         }
         0x0B => {
-            cpu.tick_internal_mcycle(bus);
             let before = cpu.bc();
             bus.trigger_oam_bug_idu_write(before);
+            cpu.tick_internal_mcycle(bus);
             cpu.set_bc(before.wrapping_sub(1));
             8
         }
         0x1B => {
-            cpu.tick_internal_mcycle(bus);
             let before = cpu.de();
             bus.trigger_oam_bug_idu_write(before);
+            cpu.tick_internal_mcycle(bus);
             cpu.set_de(before.wrapping_sub(1));
             8
         }
         0x2B => {
-            cpu.tick_internal_mcycle(bus);
             let before = cpu.hl();
             bus.trigger_oam_bug_idu_write(before);
+            cpu.tick_internal_mcycle(bus);
             cpu.set_hl(before.wrapping_sub(1));
             8
         }
         0x3B => {
-            cpu.tick_internal_mcycle(bus);
             let before = cpu.sp;
             bus.trigger_oam_bug_idu_write(before);
+            cpu.tick_internal_mcycle(bus);
             cpu.sp = before.wrapping_sub(1);
             8
         }

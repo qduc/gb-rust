@@ -1,6 +1,6 @@
 # Phase 10 (Milestone A): OAM Corruption Accuracy
 
-## Status: IN PROGRESS
+## Status: COMPLETE
 
 ## Scope
 - Files/modules to change:
@@ -14,32 +14,32 @@
   - Non-DMG frontend feature work
 
 ## Acceptance Criteria
-- [ ] `oam_bug` multi-ROM reports full pass.
+- [x] `oam_bug` multi-ROM reports full pass.
 - [x] OAM bug triggers are modeled for CPU reads/writes to `0xFE00..=0xFEFF` during mode 2.
 - [x] OAM bug triggers are modeled for IDU-backed instructions (`INC/DEC rr`, `LD A,(HL+/-)`, `PUSH/POP`).
-- [ ] Corruption pattern matches timing-dependent and instruction-effect ROMs (`7-timing_effect`, `8-instr_effect`).
-- [ ] LCD-enable sync behavior matches `1-lcd_sync`.
+- [x] Corruption pattern matches timing-dependent and instruction-effect ROMs (`7-timing_effect`, `8-instr_effect`).
+- [x] LCD-enable sync behavior matches `1-lcd_sync`.
 
 ## Tests
 - [x] `cargo test --workspace`
 - [x] ROM evidence run for `oam_bug` singles.
 
 Current ROM evidence (2026-02-11):
-- PASS: `2-causes`, `3-non_causes`, `4-scanline_timing`, `5-timing_bug`, `6-timing_no_bug`
-- FAIL/TIMEOUT: `1-lcd_sync`, `7-timing_effect`, `8-instr_effect`
+- PASS: `1-lcd_sync`, `2-causes`, `3-non_causes`, `4-scanline_timing`, `5-timing_bug`, `6-timing_no_bug`, `7-timing_effect`, `8-instr_effect`
+- FULL PASS: `oam_bug.gb` (multi-ROM)
 
 ## Implementation Steps
 1. [x] Add mode-2 OAM corruption triggers in bus access paths.
 2. [x] Add IDU-driven corruption hooks in CPU instruction paths.
 3. [x] Validate timing-window ROMs and non-cause ROMs.
-4. [ ] Close remaining LCD sync + instruction/timing pattern mismatches.
-5. [ ] Re-run full `oam_bug` and update roadmap caveats.
+4. [x] Close remaining LCD sync + instruction/timing pattern mismatches.
+5. [x] Re-run full `oam_bug` and update roadmap caveats.
 
 ## Exit Gate
 - [x] `cargo fmt --all`
 - [x] `cargo clippy --workspace --all-targets -- -D warnings`
 - [x] `cargo test --workspace`
-- [ ] `oam_bug` full pass evidence recorded
+- [x] `oam_bug` full pass evidence recorded
 
 ## Next Session Checklist
 1. Reproduce baseline before changes: run `oam_bug/oam_bug.gb` and confirm current status (`01:03`, `02..06:ok`, unresolved `07`).

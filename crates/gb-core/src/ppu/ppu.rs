@@ -70,7 +70,7 @@ impl Ppu {
 
         if !self.lcd_enabled {
             self.lcd_enabled = true;
-            self.dots = 0;
+            self.dots = 4;
             self.ly = 0;
             self.mode = 2;
             self.prev_coincidence = false;

@@ -243,18 +243,22 @@ impl Cpu {
     pub fn push16(&mut self, bus: &mut Bus, v: u16) {
         let [hi, lo] = v.to_be_bytes();
         bus.trigger_oam_bug_idu_write(self.sp);
+        self.tick_internal_mcycle(bus);
+
         self.sp = self.sp.wrapping_sub(1);
         self.write8(bus, self.sp, hi);
-        bus.trigger_oam_bug_idu_write(self.sp);
+
         self.sp = self.sp.wrapping_sub(1);
         self.write8(bus, self.sp, lo);
     }
 
     #[inline]
     pub fn pop16(&mut self, bus: &mut Bus) -> u16 {
+        bus.schedule_oam_bug_idu_read(self.sp);
         let lo = self.read8(bus, self.sp);
         self.sp = self.sp.wrapping_add(1);
-        bus.trigger_oam_bug_idu_write(self.sp);
+
+        bus.schedule_oam_bug_idu_read(self.sp);
         let hi = self.read8(bus, self.sp);
         self.sp = self.sp.wrapping_add(1);
         u16::from_be_bytes([hi, lo])

@@ -77,8 +77,8 @@ Boundary summary:
 - [ ] Not yet at full DMG compatibility sign-off.
 - Known caveats:
   - `halt_bug.gb` is passed and handled correctly in `gb-cli` via VRAM scraping.
-  - `oam_bug` suite is partially fixed. As of 2026-02-11, `2-causes`, `3-non_causes`, `4-scanline_timing`, `5-timing_bug`, and `6-timing_no_bug` pass; `1-lcd_sync` fails and `7-timing_effect` / `8-instr_effect` still do not complete with PASS output.
-  - `interrupt_time.gb` is CGB-only and tracked in Milestone B.
+  - `oam_bug` suite is fully fixed and reports FULL PASS as of 2026-02-11.
+  - `interrupt_time.gb` remains a Milestone B (CGB) target due to cycle-accurate interrupt latency requirements.
   - `dmg_sound` ROMs have mixed results; APU functional but lacking full hardware parity.
   - CGB-only behavior (Double Speed, Banking) foundational work is complete, but expansion is ongoing.
 
