@@ -1,12 +1,5 @@
-#[cfg(feature = "sdl")]
 mod audio;
 
-#[cfg(not(feature = "sdl"))]
-fn main() {
-    println!("gb-sdl built without SDL support; enable with: cargo run -p gb-sdl --features sdl");
-}
-
-#[cfg(feature = "sdl")]
 fn keycode_to_button(key: sdl2::keyboard::Keycode) -> Option<gb_core::input::Button> {
     use gb_core::input::Button;
     use sdl2::keyboard::Keycode;
@@ -24,7 +17,6 @@ fn keycode_to_button(key: sdl2::keyboard::Keycode) -> Option<gb_core::input::But
     }
 }
 
-#[cfg(feature = "sdl")]
 fn init_dmg_post_boot(gb: &mut gb_core::gb::GameBoy) {
     // DMG (no-boot-rom) register values commonly used by emulators.
     gb.cpu.a = 0x01;
@@ -80,7 +72,6 @@ fn init_dmg_post_boot(gb: &mut gb_core::gb::GameBoy) {
     }
 }
 
-#[cfg(feature = "sdl")]
 fn write_framebuffer_rgba8888_bytes(fb: &gb_core::ppu::Framebuffer, out: &mut [u8]) {
     assert_eq!(out.len(), fb.len() * 4);
     for (px, chunk) in fb.iter().zip(out.chunks_exact_mut(4)) {
@@ -95,7 +86,6 @@ fn write_framebuffer_rgba8888_bytes(fb: &gb_core::ppu::Framebuffer, out: &mut [u
     }
 }
 
-#[cfg(feature = "sdl")]
 fn main() -> Result<(), String> {
     use gb_core::bus::Bus;
     use gb_core::cartridge::Cartridge;
@@ -130,7 +120,8 @@ fn main() -> Result<(), String> {
     let texture_creator = canvas.texture_creator();
     let mut texture = texture_creator
         .create_texture_streaming(
-            PixelFormatEnum::RGBA8888,
+            // Use endianness-safe RGBA32 for byte buffer uploads in RGBA order.
+            PixelFormatEnum::RGBA32,
             LCD_WIDTH as u32,
             LCD_HEIGHT as u32,
         )
@@ -212,7 +203,7 @@ fn main() -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(all(feature = "sdl", test))]
+#[cfg(test)]
 mod tests {
     use super::{keycode_to_button, write_framebuffer_rgba8888_bytes};
     use gb_core::input::Button;
