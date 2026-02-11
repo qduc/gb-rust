@@ -58,7 +58,7 @@ Docs: [phase-06-ppu-mode-timing-ly-stat](phases/phase-06-ppu-mode-timing-ly-stat
 
 ## 10) Final Hardening (DMG/Core)
 - [x] Run baseline timing ROMs in CLI (`instr_timing`, `mem_timing`, `cpu_instrs`)
-- [ ] Resolve remaining DMG ROM-suite failures/timeouts (`halt_bug.gb`)
+- [x] Resolve remaining DMG ROM-suite failures/timeouts (`halt_bug.gb`)
 - [x] Fix runtime panic seen in suite runs (`crates/gb-core/src/cpu/cpu.rs` step cycle assertion)
 - [x] Document known limitations in `docs/`
 
@@ -82,33 +82,33 @@ Boundary summary:
 
 ## 12) Milestone A Backlog (Complete Before Any CGB Work)
 Execution order is strict:
-1. [ ] Audio / APU
+1. [x] Audio / APU
 - [x] Replace APU stub with real DMG APU implementation (channels, frame sequencer, mixing, timing)
 - [x] Add APU correctness tests using `dmg_sound` ROM expectations
 - [x] Verify stable SDL audio output under long-running gameplay
-2. [ ] Cartridge / Save Support
+2. [x] Cartridge / Save Support
 - [x] Add missing mapper support needed by real games (MBC5, optionally MBC2)
 - [x] Implement MBC3 RTC registers/latching behavior (currently stubbed)
 - [x] Add battery-backed SRAM/RTC persistence (`.sav`) load/store
-3. [ ] CPU/Timing Stability
+3. [x] CPU/Timing Stability
 - [x] Add VRAM-based PASS/FAIL detection for on-screen reporting ROMs (e.g., `halt_bug.gb`) in `gb-cli` and provide `--print-vram` to aid debugging (implemented in `crates/gb-cli/src/main.rs`)
-- [ ] Investigate and fix any remaining HALT timing discrepancies against hardware tests
+- [x] Investigate and fix any remaining HALT timing discrepancies against hardware tests
 - [x] Keep HALT/timing behavior stable under full suite stress (no debug assertions/panics)
-- [ ] Re-run full DMG ROM suite with default cap and ensure no regressions
-4. [ ] DMA/PPU Accuracy
+- [x] Re-run full DMG ROM suite with default cap and ensure no regressions
+4. [x] DMA/PPU Accuracy
 - [x] Model OAM DMA timing and CPU bus restrictions more accurately (currently immediate copy)
 - [x] Add tests for edge timing interactions that impact game compatibility
-5. [ ] Milestone A Exit Gate
-- [ ] `cargo fmt --all`
-- [ ] `cargo clippy --workspace --all-targets -- -D warnings`
-- [ ] `cargo test --workspace`
-- [ ] DMG suite pass set recorded in docs (blargg + selected mooneye DMG cases)
+5. [x] Milestone A Exit Gate
+- [x] `cargo fmt --all`
+- [x] `cargo clippy --workspace --all-targets -- -D warnings`
+- [x] `cargo test --workspace`
+- [x] DMG suite pass set recorded in docs (blargg + selected mooneye DMG cases)
 
 ## 13) Milestone B: CGB Expansion Path (In Scope, Starts After Section 12)
 Detailed plan doc: [phase-11-cgb-expansion-path](phases/phase-11-cgb-expansion-path.md)
 
 Ordered CGB phases:
-- [ ] Phase 12: CGB mode foundation (KEY1/speed switch, boot mode detection, CGB-only register gating)
+- [ ] Phase 12: CGB mode foundation (KEY1/speed switch, boot mode detection, CGB-only register gating) — [phase-12-cgb-mode-foundation](phases/phase-12-cgb-mode-foundation.md)
 - [ ] Phase 13: CGB memory model (VRAM bank switching, WRAM banking, HDMA/GDMA behavior)
 - [ ] Phase 14: CGB PPU features (attributes, palettes, priority rules, tile bank behavior)
 - [ ] Phase 15: CGB audio/timing stabilization and frontend validation

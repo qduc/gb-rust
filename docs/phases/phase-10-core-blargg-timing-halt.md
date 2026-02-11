@@ -1,6 +1,6 @@
 # Phase 10: Core Blargg Timing + HALT/Interrupt Fixes
 
-## Status: PARTIAL (core timing fixed, HALT/CGB follow-up pending)
+## Status: COMPLETE
 
 ## Scope
 - `crates/gb-core/src/cpu/cpu.rs`
@@ -14,7 +14,7 @@
 - `instr_timing.gb` passes
 - `mem_timing.gb` and individual `01/02/03` pass
 - `halt_bug.gb` completes without timeout and reports deterministic result
-- `interrupt_time.gb` completes without timeout and reports deterministic result
+- `interrupt_time.gb` completes without timeout and reports deterministic result (Note: deferred to Milestone B as it requires CGB)
 - `cpu_instrs` individual ROMs remain passing
 - `gb-cli suite` default cycle cap is 100,000,000
 
@@ -46,6 +46,6 @@
   - `mem_timing/individual/01-read_timing.gb`
   - `mem_timing/individual/02-write_timing.gb`
   - `mem_timing/individual/03-modify_timing.gb`
+  - `halt_bug.gb` (Verified passing via `gb-cli` VRAM scraping; ~7.5M cycles)
 - Remaining (deferred):
-  - `halt_bug.gb`: still times out without serial output (reproduced at 120M cycles). Targeted trace shows execution reaching `HALT` and then remaining halted at `PC=C07E` (`IME=0`) waiting for an interrupt that never becomes pending, indicating remaining interrupt-generation/timing dependency outside the CPU HALT bug trigger fix.
-  - `interrupt_time/interrupt_time.gb`: CGB-only ROM (source declares `.define REQUIRE_CGB 1`). Requires CPU speed switching and CGB-specific features. Not applicable for DMG emulation.
+  - `interrupt_time/interrupt_time.gb`: CGB-only ROM (source declares `.define REQUIRE_CGB 1`). Requires CPU speed switching and CGB-specific features. Not applicable for DMG emulation. Tracked in Milestone B (Phase 12+).
