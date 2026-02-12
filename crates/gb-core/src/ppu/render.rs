@@ -24,9 +24,9 @@ fn scale_5bit_to_8bit(v: u8) -> u8 {
 }
 
 fn cgb_bgr15_to_argb(color: u16) -> u32 {
-    let b = (color & 0x1F) as u8;
+    let r = (color & 0x1F) as u8;
     let g = ((color >> 5) & 0x1F) as u8;
-    let r = ((color >> 10) & 0x1F) as u8;
+    let b = ((color >> 10) & 0x1F) as u8;
 
     let r8 = scale_5bit_to_8bit(r);
     let g8 = scale_5bit_to_8bit(g);
@@ -68,8 +68,10 @@ fn render_bg_window_scanline(
 
     let lcdc = io[LCDC];
     // On DMG, bit 0 controls both BG and window rendering.
-    let bg_enabled = (lcdc & 0x01) != 0;
-    let window_enabled = bg_enabled && (lcdc & 0x20) != 0;
+    // In CGB mode, BG and window are always enabled, but bit 0
+    // acts as a "master priority" flag.
+    let bg_enabled = if cgb_mode { true } else { (lcdc & 0x01) != 0 };
+    let window_enabled = ((lcdc & 0x01) != 0 || cgb_mode) && (lcdc & 0x20) != 0;
 
     let scy = io[SCY];
     let scx = io[SCX];
@@ -385,7 +387,8 @@ fn render_obj_scanline(
         let bg_nonzero = bg_pixels[x].color_num != 0;
 
         if cgb_mode {
-            if (behind_bg || bg_pixels[x].bg_to_oam_priority) && bg_nonzero {
+            let master_priority = (lcdc & 0x01) != 0;
+            if master_priority && (behind_bg || bg_pixels[x].bg_to_oam_priority) && bg_nonzero {
                 continue;
             }
         } else if behind_bg && bg_enabled && bg_nonzero {

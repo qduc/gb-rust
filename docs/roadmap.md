@@ -115,7 +115,7 @@ Detailed plan doc: [phase-11-cgb-expansion-path](phases/phase-11-cgb-expansion-p
 Ordered CGB phases:
 - [x] Phase 12: CGB mode foundation (KEY1/speed switch, boot mode detection, CGB-only register gating) — [phase-12-cgb-mode-foundation](phases/phase-12-cgb-mode-foundation.md)
 - [x] Phase 13: CGB memory model (VRAM bank switching, WRAM banking, HDMA/GDMA behavior) — [phase-13-cgb-memory-model](phases/phase-13-cgb-memory-model.md)
-- [ ] Phase 14: CGB PPU features (attributes, palettes, priority rules, tile bank behavior) — in progress (first slices landed; **OBJ palette & OBJ sprite slice implemented**; remaining cycle-exact priority/timing edge cases still to do) — ([phase-14-cgb-ppu-features](phases/phase-14-cgb-ppu-features.md))
+- [x] Phase 14: CGB PPU features (attributes, palettes, priority rules, tile bank behavior, master priority) — COMPLETED — ([phase-14-cgb-ppu-features](phases/phase-14-cgb-ppu-features.md))
 - [ ] Phase 15: CGB audio/timing stabilization and frontend validation — **in progress** (double-speed alignment implemented; APU *wave RAM* CGB semantics implemented; CGB sound ROM triage performed; a few singles remain failing: `03-trigger`, `09-wave read while on`)
 
 CGB ROM strategy (must be tracked per phase):

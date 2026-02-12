@@ -126,9 +126,9 @@ fn cgb_bg_tile_attribute_bank_select_changes_fetched_tile_data() {
     bus.vram[0x2000 + 16] = 0xFF;
     bus.vram[0x2000 + 17] = 0xFF;
 
-    // Palette 0: color0 = white, color3 = red (BGR15: r=31,g=0,b=0 => 0x7C00).
+    // Palette 0: color0 = white, color3 = red (BGR15: r=31,g=0,b=0 => 0x001F).
     write_bg_palette_color(&mut bus, 0, 0, 0x7FFF);
-    write_bg_palette_color(&mut bus, 0, 3, 0x7C00);
+    write_bg_palette_color(&mut bus, 0, 3, 0x001F);
 
     bus.write8(0xFF40, 0x91);
 
@@ -187,9 +187,9 @@ fn cgb_bg_x_flip_attribute_flips_tile_pixels() {
     bus.vram[4 * 16] = 0x80;
     bus.vram[4 * 16 + 1] = 0x00;
 
-    // Palette 0 color0 = white, color1 = blue (BGR15: r=0,g=0,b=31 => 0x001F).
+    // Palette 0 color0 = white, color1 = blue (BGR15: r=0,g=0,b=31 => 0x7C00).
     write_bg_palette_color(&mut bus, 0, 0, 0x7FFF);
-    write_bg_palette_color(&mut bus, 0, 1, 0x001F);
+    write_bg_palette_color(&mut bus, 0, 1, 0x7C00);
 
     bus.write8(0xFF40, 0x91);
 
@@ -215,8 +215,8 @@ fn cgb_sprite_uses_obj_palette_index_for_color() {
     bus.oam[2] = 1;
     bus.oam[3] = 0x03;
 
-    // OBJ palette 3 color 1 = blue.
-    write_obj_palette_color(&mut bus, 3, 1, 0x001F);
+    // OBJ palette 3 color 1 = blue (BGR15: 0x7C00).
+    write_obj_palette_color(&mut bus, 3, 1, 0x7C00);
 
     bus.write8(0xFF40, 0x93); // LCD on, BG+OBJ enabled.
 
@@ -275,7 +275,7 @@ fn cgb_sprite_overlap_uses_oam_order_priority() {
     bus.oam[7] = 0x02;
 
     write_obj_palette_color(&mut bus, 1, 1, 0x03E0);
-    write_obj_palette_color(&mut bus, 2, 1, 0x001F);
+    write_obj_palette_color(&mut bus, 2, 1, 0x7C00);
 
     bus.write8(0xFF40, 0x93);
 
@@ -304,7 +304,7 @@ fn cgb_window_overrides_background_when_enabled() {
 
     // Palette 0: color1 = green, color2 = blue.
     write_bg_palette_color(&mut bus, 0, 1, 0x03E0);
-    write_bg_palette_color(&mut bus, 0, 2, 0x001F);
+    write_bg_palette_color(&mut bus, 0, 2, 0x7C00);
 
     // Enable LCD+BG+Window, window map 0x9C00, unsigned tile data.
     bus.write8(0xFF4A, 0x00); // WY
@@ -316,4 +316,50 @@ fn cgb_window_overrides_background_when_enabled() {
 
     // Window pixel should override BG pixel at x=0.
     assert_eq!(bus.ppu.framebuffer()[0], 0xFF00_00FF);
+}
+
+#[test]
+fn cgb_lcdc_bit0_zero_ignores_priorities_but_bg_remains_visible() {
+    let mut bus = setup_cgb_bus();
+
+    // BG tile in map at (0,0) and (1,0): tile 2.
+    bus.vram[0x1800] = 2;
+    bus.vram[0x1801] = 2;
+    // Attribute map in bank 1: BG-to-OAM priority set.
+    bus.vram[0x2000 + 0x1800] = 0x80;
+    bus.vram[0x2000 + 0x1801] = 0x80;
+
+    // BG tile 2 row 0 => color 1 across the row.
+    bus.vram[2 * 16] = 0xFF;
+    bus.vram[2 * 16 + 1] = 0x00;
+
+    // Sprite tile 1 row 0 => color 1 across the row.
+    bus.vram[16] = 0xFF;
+    bus.vram[17] = 0x00;
+
+    // Sprite 0 at screen (0,0)
+    bus.oam[0] = 16;
+    bus.oam[1] = 8;
+    bus.oam[2] = 1;
+    bus.oam[3] = 0x00; // Sprite-to-BG priority NOT set (sprite over BG).
+
+    // Palette 0 color1 = green (BGR15: r=0,g=31,b=0 => 0x03E0).
+    write_bg_palette_color(&mut bus, 0, 1, 0x03E0);
+    // OBJ palette 0 color1 = red (BGR15: r=31,g=0,b=0 => 0x001F).
+    write_obj_palette_color(&mut bus, 0, 1, 0x001F);
+
+    // LCD on, OBJ enabled, BUT BG/Window priority bit 0 is OFF.
+    // In CGB, this should mean BG is still visible, but priority bits are ignored.
+    // So even though BG-to-OAM priority is set in VRAM, the sprite should appear.
+    bus.write8(0xFF40, 0x92); // 1001 0010: LCD on, OBJ on, BG off (priority bit 0).
+
+    bus.tick(0);
+    bus.tick(252);
+
+    // Sprite appears at x=0..7. Let's check x=0 (sprite) and x=8 (no sprite).
+    // In CGB, BG should be visible even if LCDC bit 0 is 0.
+    // x=0: Sprite (red)
+    assert_eq!(bus.ppu.framebuffer()[0], 0xFFFF_0000);
+    // x=8: BG color 1 (green)
+    assert_eq!(bus.ppu.framebuffer()[8], 0xFF00_FF00);
 }
