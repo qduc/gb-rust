@@ -22,6 +22,16 @@ impl Timer {
         }
     }
 
+    /// Returns the raw 16-bit internal divider counter backing DIV (FF04).
+    ///
+    /// This is *not* directly CPU-visible (CPU only sees the upper 8 bits via DIV),
+    /// but other hardware units (notably the APU frame sequencer) effectively derive
+    /// timing from this counter.
+    #[inline]
+    pub(crate) fn raw_counter(&self) -> u16 {
+        self.counter
+    }
+
     #[inline]
     fn input_bit(counter: u16, tac: u8) -> bool {
         if (tac & 0x04) == 0 {

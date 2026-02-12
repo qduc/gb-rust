@@ -5,8 +5,8 @@
 - Out of scope: New MBC mappers, PPU rendering refactors.
 
 ## Acceptance Criteria
-- [ ] `roms/gb-test-roms/cgb_sound/rom_singles/03-trigger.gb` passes.
-- [ ] `roms/gb-test-roms/cgb_sound/rom_singles/09-wave read while on.gb` passes.
+- [x] `roms/gb-test-roms/cgb_sound/rom_singles/03-trigger.gb` passes.
+- [x] `roms/gb-test-roms/cgb_sound/rom_singles/09-wave read while on.gb` passes.
 - [ ] Double-speed logic verified against hardware-accurate behavior (especially Timer DIV and APU length).
 
 ## Tests
@@ -26,5 +26,5 @@
 - [ ] `cargo test --workspace`
 
 ## Notes
-- `03-trigger.gb` failure "Enabling in first half of length period should clock length" is a known APU quirk where certain register writes can trigger an immediate length clock depending on the frame sequencer's internal state.
-- `09-wave read while on.gb` failure involves how Wave RAM is read back while the channel is active on CGB.
+- `03-trigger.gb` required ordering the "extra length clock" (on NRx4 writes when the sequencer is in the odd phase) before trigger processing, plus CGB's frozen-length re-trigger behavior.
+- `09-wave read while on.gb` required wave-channel trigger/readback quirks: the CH3 sample buffer is not refilled on trigger, CGB read-while-on uses a redirected "current byte" view, and the trigger/timer phase is sensitive.

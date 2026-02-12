@@ -88,7 +88,10 @@ impl Apu {
             self.ch4.tick_timer();
         }
 
-        if self.powered || self.cgb_mode {
+        // The frame sequencer is only active while the APU is powered on (NR52 bit 7).
+        // CGB differs from DMG in how power cycling affects phase, but the sequencer itself
+        // is still halted while powered off.
+        if self.powered {
             self.frame_seq_counter = self.frame_seq_counter.wrapping_add(1);
             if self.frame_seq_counter >= FRAME_SEQUENCER_PERIOD_CYCLES {
                 self.frame_seq_counter = 0;
@@ -111,7 +114,7 @@ impl Apu {
         let step = self.frame_seq_step;
         self.frame_seq_step = (self.frame_seq_step + 1) & 7;
 
-        if (self.powered || self.cgb_mode) && step % 2 == 0 {
+        if self.powered && step.is_multiple_of(2) {
             self.ch1.clock_length_internal(false, self.cgb_mode);
             self.ch2.clock_length_internal(false, self.cgb_mode);
             self.ch3.clock_length_internal(false, self.cgb_mode);
@@ -237,7 +240,7 @@ impl Apu {
         status | 0x70
     }
 
-    pub fn write_register(&mut self, addr: u16, value: u8) {
+    pub fn write_register(&mut self, addr: u16, value: u8, div_counter: u16) {
         if (WAVE_RAM_START..=WAVE_RAM_END).contains(&addr) {
             let index = (addr - WAVE_RAM_START) as usize;
             self.ch3.write_wave_ram(index, value, self.cgb_mode);
@@ -245,7 +248,7 @@ impl Apu {
         }
 
         if addr == NR52 {
-            self.write_nr52(value);
+            self.write_nr52(value, div_counter);
             return;
         }
 
@@ -267,23 +270,31 @@ impl Apu {
             NR11 => self.ch1.write_duty_length(value),
             NR12 => self.ch1.write_envelope(value),
             NR13 => self.ch1.write_freq_lo(value),
-            NR14 => self.ch1.write_nr14(value, self.frame_seq_step, self.cgb_mode),
+            NR14 => self
+                .ch1
+                .write_nr14(value, self.frame_seq_step, self.cgb_mode),
 
             NR21 => self.ch2.write_duty_length(value),
             NR22 => self.ch2.write_envelope(value),
             NR23 => self.ch2.write_freq_lo(value),
-            NR24 => self.ch2.write_nr14(value, self.frame_seq_step, self.cgb_mode),
+            NR24 => self
+                .ch2
+                .write_nr14(value, self.frame_seq_step, self.cgb_mode),
 
             NR30 => self.ch3.write_nr30(value),
             NR31 => self.ch3.write_nr31(value),
             NR32 => self.ch3.write_nr32(value),
             NR33 => self.ch3.write_nr33(value, self.cgb_mode),
-            NR34 => self.ch3.write_nr34(value, self.frame_seq_step, self.cgb_mode),
+            NR34 => self
+                .ch3
+                .write_nr34(value, self.frame_seq_step, self.cgb_mode),
 
             NR41 => self.ch4.write_nr41(value),
             NR42 => self.ch4.write_nr42(value),
             NR43 => self.ch4.write_nr43(value),
-            NR44 => self.ch4.write_nr44(value, self.frame_seq_step, self.cgb_mode),
+            NR44 => self
+                .ch4
+                .write_nr44(value, self.frame_seq_step, self.cgb_mode),
 
             NR50 => self.nr50 = value,
             NR51 => self.nr51 = value,
@@ -292,7 +303,7 @@ impl Apu {
         }
     }
 
-    fn write_nr52(&mut self, value: u8) {
+    fn write_nr52(&mut self, value: u8, div_counter: u16) {
         let next_power = (value & 0x80) != 0;
 
         if self.powered && !next_power {
@@ -314,8 +325,19 @@ impl Apu {
         } else if !self.powered && next_power {
             self.powered = true;
 
+            // Hardware behavior (cgb_sound test #5): the APU frame sequencer is derived from the
+            // global divider, so powering up re-phases the "time to next frame tick".
+            // Model this by syncing our sub-counter to DIV's lower 13 bits (mod 8192) while
+            // resetting the step to the power-on state.
+            if self.cgb_mode {
+                // Powering up resets the frame sequencer step to 0.
+                self.frame_seq_counter = div_counter & 0x1FFF;
+                self.frame_seq_step = 0;
+            }
+
             // On DMG, the frame sequencer is reset when powered on.
-            // On CGB, it continues from its current state.
+            // On CGB, the sequencer step resets to its power-on state, but its sub-cycle phase
+            // is effectively aligned to DIV (handled above).
             if !self.cgb_mode {
                 self.frame_seq_step = 0;
                 self.frame_seq_counter = 0;

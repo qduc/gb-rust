@@ -676,7 +676,10 @@ impl Bus {
                     0xFF06 => self.timer.write_tma(val),
                     0xFF07 => self.timer.write_tac(val, &mut self.iflag),
                     0xFF0F => self.iflag = val & 0x1F,
-                    0xFF10..=0xFF3F => self.apu.write_register(addr, val),
+                    // APU register accesses take an M-cycle. Some APU behaviors (notably NR52
+                    // power-up re-phasing on CGB) are sensitive to the global DIV phase.
+                    // Use the DIV value at the *end* of the access (+4 cycles).
+                    0xFF10..=0xFF3F => self.apu.write_register(addr, val, self.timer.raw_counter()),
                     0xFF4F => self.write_vbk(val),
                     0xFF4D => self.write_key1(val),
                     0xFF70 => self.write_svbk(val),

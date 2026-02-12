@@ -46,7 +46,10 @@ impl NoiseChannel {
 
         self.enabled = false;
         self.dac_enabled = false;
-        // self.length_counter is preserved
+        // Length counters are preserved on DMG/MGB. On CGB they are cleared by power cycling.
+        if cgb_mode {
+            self.length_counter = 0;
+        }
         self.length_frozen = false;
         self.timer = 1;
         self.volume = 0;
@@ -80,16 +83,25 @@ impl NoiseChannel {
 
         self.nr44 = value & 0xC7;
 
+        // Hardware quirk: on an odd frame sequencer step, enabling the length counter
+        // via NR44 can cause an immediate extra length clock, which happens before trigger.
+        let mut extra_froze = false;
+        if !frame_seq_step.is_multiple_of(2) && !old_len_en && new_len_en {
+            self.clock_length_internal(true, cgb_mode);
+            extra_froze = cgb_mode && self.length_frozen;
+        }
+
         if trigger {
             self.trigger();
         }
 
-        if frame_seq_step % 2 != 0 {
-            if !old_len_en && new_len_en {
-                self.clock_length_internal(true, cgb_mode);
-            } else if trigger && new_len_en && old_frozen && cgb_mode {
-                self.clock_length_internal(false, cgb_mode);
-            }
+        if !frame_seq_step.is_multiple_of(2)
+            && trigger
+            && new_len_en
+            && cgb_mode
+            && (old_frozen || extra_froze)
+        {
+            self.clock_length_internal(false, cgb_mode);
         }
     }
 
@@ -141,8 +153,6 @@ impl NoiseChannel {
                     self.length_frozen = true;
                 }
             }
-        } else if is_extra_clock && cgb_mode {
-            self.length_frozen = true;
         }
     }
 

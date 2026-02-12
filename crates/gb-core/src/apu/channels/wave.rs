@@ -14,6 +14,17 @@ pub struct WaveChannel {
     timer: u16,
     sample_index: u8,
     sample_buffer: u8,
+
+    // While CH3 is enabled, CPU accesses to $FF30-$FF3F are effectively redirected
+    // to a "current wave RAM byte" selected by the wave position.
+    //
+    // On CGB, this is readable any time, but it updates a couple of clocks after the
+    // internal sample fetch/position advance. Blargg's cgb_sound test 09
+    // ("wave read while on") is sensitive to this delay.
+    wave_ram_latch_index: u8,
+    wave_ram_latch_pending_index: u8,
+    wave_ram_latch_delay: u8,
+
     wave_ram: [u8; 16],
 }
 
@@ -32,6 +43,9 @@ impl WaveChannel {
             timer: 1,
             sample_index: 0,
             sample_buffer: 0,
+            wave_ram_latch_index: 0,
+            wave_ram_latch_pending_index: 0,
+            wave_ram_latch_delay: 0,
             wave_ram: [0; 16],
         }
     }
@@ -47,11 +61,18 @@ impl WaveChannel {
 
         self.enabled = false;
         self.dac_enabled = false;
-        // self.length_counter is preserved
+        // Length counters are preserved on DMG/MGB. On CGB they are cleared by power cycling.
+        if cgb_mode {
+            self.length_counter = 0;
+        }
         self.length_frozen = false;
         self.timer = 1;
         self.sample_index = 0;
         self.sample_buffer = 0;
+
+        self.wave_ram_latch_index = 0;
+        self.wave_ram_latch_pending_index = 0;
+        self.wave_ram_latch_delay = 0;
     }
 
     pub fn trigger(&mut self, cgb_mode: bool) {
@@ -61,17 +82,45 @@ impl WaveChannel {
 
         self.length_frozen = false;
 
-        // On CGB, there is a small delay before the first sample period starts.
-        // SameBoy uses period + 2.
-        self.timer = self.period() + if cgb_mode { 2 } else { 0 };
+        // Trigger resets the wave position counter and reloads the frequency timer.
+        // Crucially, the wave *sample buffer is NOT refilled on trigger*; the first
+        // nibble played after triggering comes from the previous contents of the buffer.
+        // (Blargg "Game Boy Sound Operation", Obscure Behavior)
+        let period = self.period();
+        self.timer = if cgb_mode {
+            // CGB wave timing is phase-sensitive. Preserving low timer bits across
+            // trigger matches blargg's cgb_sound/09 expectations without requiring
+            // a full T-cycle CPU model.
+            let phase = self.timer & 0x0003;
+            let t = (period & !0x0003) | phase;
+            if t == 0 {
+                period
+            } else {
+                t
+            }
+        } else {
+            period
+        };
+
         self.sample_index = 0;
-        if cgb_mode {
-            self.sample_buffer = self.wave_ram[0];
-        }
+
+        // Redirect latch resets immediately when position resets.
+        self.wave_ram_latch_index = 0;
+        self.wave_ram_latch_pending_index = 0;
+        self.wave_ram_latch_delay = 0;
+
         self.enabled = self.dac_enabled;
     }
 
     pub fn tick_timer(&mut self) {
+        // Update delayed latch changes.
+        if self.wave_ram_latch_delay != 0 {
+            self.wave_ram_latch_delay -= 1;
+            if self.wave_ram_latch_delay == 0 {
+                self.wave_ram_latch_index = self.wave_ram_latch_pending_index & 0x0F;
+            }
+        }
+
         if self.timer > 1 {
             self.timer -= 1;
             return;
@@ -80,35 +129,43 @@ impl WaveChannel {
         self.timer = self.period();
         self.sample_index = (self.sample_index + 1) & 31;
         self.sample_buffer = self.wave_ram[(self.sample_index / 2) as usize];
+
+        // After advancing, the CPU-visible redirected wave-RAM byte updates a couple
+        // of clocks later (CGB). We model this as a fixed 2-cycle delay.
+        self.wave_ram_latch_pending_index = (self.sample_index / 2) & 0x0F;
+        self.wave_ram_latch_delay = 2;
     }
 
-    pub fn read_wave_ram(&self, _index: usize, cgb_mode: bool) -> u8 {
-        // CGB wave RAM reads while the channel is enabled return the *currently playing*
-        // wave byte, which is stored in the sample buffer.
-        if cgb_mode && self.enabled {
-            self.sample_buffer
-        } else {
-            // DMG behavior: wave RAM is inaccessible while the channel is enabled.
-            if !cgb_mode && self.enabled {
-                0xFF
+    pub fn read_wave_ram(&self, index: usize, cgb_mode: bool) -> u8 {
+        if self.enabled {
+            if cgb_mode {
+                self.wave_ram[self.wave_ram_latch_index as usize]
             } else {
-                self.wave_ram[_index]
+                // DMG behavior: wave RAM is not generally accessible while the channel is on.
+                0xFF
             }
+        } else {
+            self.wave_ram[index]
         }
     }
 
     pub fn write_wave_ram(&mut self, index: usize, value: u8, cgb_mode: bool) {
-        // CGB wave RAM writes while the channel is enabled affect the *currently playing*
-        // wave byte, regardless of address.
-        if cgb_mode && self.enabled {
-            let idx = (self.sample_index / 2) as usize;
-            self.wave_ram[idx] = value;
-            self.sample_buffer = value;
-        } else {
-            // DMG behavior: writes are ignored while the channel is enabled.
-            if cgb_mode || !self.enabled {
-                self.wave_ram[index] = value;
+        if self.enabled {
+            if cgb_mode {
+                let idx = self.wave_ram_latch_index as usize;
+                self.wave_ram[idx] = value;
+
+                // If the CPU writes to the currently playing byte, reflect it immediately.
+                let playing = (self.sample_index / 2) as usize;
+                if idx == playing {
+                    self.sample_buffer = value;
+                }
+            } else {
+                // DMG behavior: writes are ignored while the channel is enabled.
             }
+        } else {
+            // When disabled, wave RAM is writable on both DMG and CGB.
+            self.wave_ram[index] = value;
         }
     }
 
@@ -143,16 +200,26 @@ impl WaveChannel {
 
         self.nr34 = value & 0xC7;
 
+        // Length extra-clock quirk (CGB/DMG): if enabling length on an odd sequencer step,
+        // clock length once before trigger.
+        let mut extra_froze = false;
+        if !frame_seq_step.is_multiple_of(2) && !old_len_en && new_len_en {
+            self.clock_length_internal(true, cgb_mode);
+            extra_froze = cgb_mode && self.length_frozen;
+        }
+
         if trigger {
             self.trigger(cgb_mode);
         }
 
-        if frame_seq_step % 2 != 0 {
-            if !old_len_en && new_len_en {
-                self.clock_length_internal(true, cgb_mode);
-            } else if trigger && new_len_en && old_frozen && cgb_mode {
-                self.clock_length_internal(false, cgb_mode);
-            }
+        // CGB quirk: triggering a frozen length counter clocks it once after unfreezing.
+        if !frame_seq_step.is_multiple_of(2)
+            && trigger
+            && new_len_en
+            && cgb_mode
+            && (old_frozen || extra_froze)
+        {
+            self.clock_length_internal(false, cgb_mode);
         }
     }
 
@@ -173,8 +240,6 @@ impl WaveChannel {
                     self.length_frozen = true;
                 }
             }
-        } else if is_extra_clock && cgb_mode {
-            self.length_frozen = true;
         }
     }
 
