@@ -72,15 +72,16 @@ Boundary summary:
 - Milestone A (DMG): boot and run DMG titles reliably, pass DMG-oriented CPU/timing/PPU/audio tests, no CGB speed switch or CGB-only hardware behavior required.
 - Milestone B (CGB): add double-speed mode, CGB-specific register semantics, VRAM/WRAM banking, CGB PPU extensions, and CGB audio/timing compatibility.
 
-## Current Real-Game Readiness (as of 2026-02-11)
+## Current Real-Game Readiness (as of 2026-02-12)
 - [x] Ready to run many real DMG games in `gb-sdl`/`gb-cli` for normal gameplay testing.
 - [ ] Not yet at full DMG compatibility sign-off.
-- Known caveats:
+- Known caveats and recent CGB progress:
   - `halt_bug.gb` is passed and handled correctly in `gb-cli` via VRAM scraping.
   - `oam_bug` suite is fully fixed and reports FULL PASS as of 2026-02-11.
   - `interrupt_time.gb` remains a Milestone B (CGB) target due to cycle-accurate interrupt latency requirements.
   - `dmg_sound` baseline is complete; APU functional for real games with some edge-case parity gaps deferred to Milestone B.
-  - CGB-only behavior (Double Speed, Banking) foundational work is complete, but expansion is ongoing.
+  - **CGB progress:** Phase 14 first slices landed (BG attributes, BG palette registers, OBJ palette & sprite slice). Phase 15 work is under way: double-speed modeling, APU wave RAM CGB semantics, and CGB sound ROM triage.
+  - **CGB sound triage:** `roms/gb-test-roms/cgb_sound/rom_singles` now reports **10/12 pass, 2 fail**. Remaining failing singles: `03-trigger.gb` and `09-wave read while on.gb` (see `docs/cgb-rom-manifest.md` for evidence and repro commands).
 
 ## 12) Milestone A Backlog (Complete Before Any CGB Work)
 Execution order is strict:
@@ -114,8 +115,8 @@ Detailed plan doc: [phase-11-cgb-expansion-path](phases/phase-11-cgb-expansion-p
 Ordered CGB phases:
 - [x] Phase 12: CGB mode foundation (KEY1/speed switch, boot mode detection, CGB-only register gating) — [phase-12-cgb-mode-foundation](phases/phase-12-cgb-mode-foundation.md)
 - [x] Phase 13: CGB memory model (VRAM bank switching, WRAM banking, HDMA/GDMA behavior) — [phase-13-cgb-memory-model](phases/phase-13-cgb-memory-model.md)
-- [ ] Phase 14: CGB PPU features (attributes, palettes, priority rules, tile bank behavior) — in progress ([phase-14-cgb-ppu-features](phases/phase-14-cgb-ppu-features.md))
-- [ ] Phase 15: CGB audio/timing stabilization and frontend validation
+- [ ] Phase 14: CGB PPU features (attributes, palettes, priority rules, tile bank behavior) — in progress (first slices landed; **OBJ palette & OBJ sprite slice implemented**; remaining cycle-exact priority/timing edge cases still to do) — ([phase-14-cgb-ppu-features](phases/phase-14-cgb-ppu-features.md))
+- [ ] Phase 15: CGB audio/timing stabilization and frontend validation — **in progress** (double-speed alignment implemented; APU *wave RAM* CGB semantics implemented; CGB sound ROM triage performed; a few singles remain failing: `03-trigger`, `09-wave read while on`)
 
 CGB ROM strategy (must be tracked per phase):
 - [ ] Keep a pinned CGB ROM manifest in docs with expected status per ROM (`pass`/`fail`/`deferred`): [cgb-rom-manifest](cgb-rom-manifest.md)

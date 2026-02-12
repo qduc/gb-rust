@@ -29,6 +29,15 @@ fn write_bg_palette_color(bus: &mut Bus, palette: u8, color: u8, bgr15: u16) {
     bus.write8(0xFF69, hi);
 }
 
+fn write_obj_palette_color(bus: &mut Bus, palette: u8, color: u8, bgr15: u16) {
+    let index = (palette as usize) * 8 + (color as usize) * 2;
+    bus.write8(0xFF6A, index as u8);
+    let [lo, hi] = bgr15.to_le_bytes();
+    bus.write8(0xFF6B, lo);
+    bus.write8(0xFF6A, (index as u8).wrapping_add(1));
+    bus.write8(0xFF6B, hi);
+}
+
 #[test]
 fn cgb_bg_palette_registers_support_index_and_auto_increment() {
     let mut bus = setup_cgb_bus();
@@ -63,6 +72,42 @@ fn bgpi_bgpd_are_gated_in_dmg_mode() {
 
     assert_eq!(bus.read8(0xFF68), 0xFF);
     assert_eq!(bus.read8(0xFF69), 0xFF);
+}
+
+#[test]
+fn cgb_obj_palette_registers_support_index_and_auto_increment() {
+    let mut bus = setup_cgb_bus();
+
+    assert_eq!(bus.read8(0xFF6A), 0x40);
+
+    bus.write8(0xFF6A, 0x80 | 0x3F);
+    bus.write8(0xFF6B, 0x34);
+
+    // Auto-increment wraps 0x3F -> 0x00 while preserving auto-inc bit.
+    assert_eq!(bus.read8(0xFF6A), 0xC0);
+
+    bus.write8(0xFF6A, 0x3F);
+    assert_eq!(bus.read8(0xFF6B), 0x34);
+
+    // With auto-increment off, index should remain unchanged.
+    bus.write8(0xFF6A, 0x02);
+    bus.write8(0xFF6B, 0xCD);
+    assert_eq!(bus.read8(0xFF6A), 0x42);
+    assert_eq!(bus.read8(0xFF6B), 0xCD);
+}
+
+#[test]
+fn obpi_obpd_are_gated_in_dmg_mode() {
+    let mut bus = setup_dmg_bus();
+
+    assert_eq!(bus.read8(0xFF6A), 0xFF);
+    assert_eq!(bus.read8(0xFF6B), 0xFF);
+
+    bus.write8(0xFF6A, 0x80);
+    bus.write8(0xFF6B, 0x66);
+
+    assert_eq!(bus.read8(0xFF6A), 0xFF);
+    assert_eq!(bus.read8(0xFF6B), 0xFF);
 }
 
 #[test]
@@ -154,6 +199,91 @@ fn cgb_bg_x_flip_attribute_flips_tile_pixels() {
     // Flipped horizontally: pixel appears at x=7 instead of x=0.
     assert_eq!(bus.ppu.framebuffer()[0], 0xFFFF_FFFF);
     assert_eq!(bus.ppu.framebuffer()[7], 0xFF00_00FF);
+}
+
+#[test]
+fn cgb_sprite_uses_obj_palette_index_for_color() {
+    let mut bus = setup_cgb_bus();
+
+    // Sprite tile 1 row 0 => color 1 across the row.
+    bus.vram[16] = 0xFF;
+    bus.vram[17] = 0x00;
+
+    // Sprite 0 at screen (0,0), attrs palette index = 3.
+    bus.oam[0] = 16;
+    bus.oam[1] = 8;
+    bus.oam[2] = 1;
+    bus.oam[3] = 0x03;
+
+    // OBJ palette 3 color 1 = blue.
+    write_obj_palette_color(&mut bus, 3, 1, 0x001F);
+
+    bus.write8(0xFF40, 0x93); // LCD on, BG+OBJ enabled.
+
+    bus.tick(0);
+    bus.tick(252);
+
+    assert_eq!(bus.ppu.framebuffer()[0], 0xFF00_00FF);
+}
+
+#[test]
+fn cgb_sprite_attribute_tile_bank_select_uses_vram_bank_1() {
+    let mut bus = setup_cgb_bus();
+
+    // Sprite tile 1 row 0 in bank 0 => color 0.
+    bus.vram[16] = 0x00;
+    bus.vram[17] = 0x00;
+    // Sprite tile 1 row 0 in bank 1 => color 1.
+    bus.vram[0x2000 + 16] = 0xFF;
+    bus.vram[0x2000 + 17] = 0x00;
+
+    // Sprite 0 at screen (0,0), attrs: bank1 + palette 1.
+    bus.oam[0] = 16;
+    bus.oam[1] = 8;
+    bus.oam[2] = 1;
+    bus.oam[3] = 0x08 | 0x01;
+
+    // OBJ palette 1 color 1 = green.
+    write_obj_palette_color(&mut bus, 1, 1, 0x03E0);
+
+    bus.write8(0xFF40, 0x93);
+
+    bus.tick(0);
+    bus.tick(252);
+
+    assert_eq!(bus.ppu.framebuffer()[0], 0xFF00_FF00);
+}
+
+#[test]
+fn cgb_sprite_overlap_uses_oam_order_priority() {
+    let mut bus = setup_cgb_bus();
+
+    // Tile 1 row 0 => color 1 across row.
+    bus.vram[16] = 0xFF;
+    bus.vram[17] = 0x00;
+
+    // Sprite 0 at x=8 (screen x=0), palette 1 => green.
+    bus.oam[0] = 16;
+    bus.oam[1] = 8;
+    bus.oam[2] = 1;
+    bus.oam[3] = 0x01;
+
+    // Sprite 1 overlaps at same x, palette 2 => blue.
+    bus.oam[4] = 16;
+    bus.oam[5] = 8;
+    bus.oam[6] = 1;
+    bus.oam[7] = 0x02;
+
+    write_obj_palette_color(&mut bus, 1, 1, 0x03E0);
+    write_obj_palette_color(&mut bus, 2, 1, 0x001F);
+
+    bus.write8(0xFF40, 0x93);
+
+    bus.tick(0);
+    bus.tick(252);
+
+    // CGB priority should pick earlier OAM entry (sprite 0, green).
+    assert_eq!(bus.ppu.framebuffer()[0], 0xFF00_FF00);
 }
 
 #[test]

@@ -32,6 +32,8 @@ const WAVE_RAM_END: u16 = 0xFF3F;
 pub struct Apu {
     powered: bool,
 
+    cgb_mode: bool,
+
     ch1: SquareChannel,
     ch2: SquareChannel,
     ch3: WaveChannel,
@@ -54,6 +56,7 @@ impl Apu {
     pub fn new() -> Self {
         Self {
             powered: true,
+            cgb_mode: false,
             ch1: SquareChannel::new(true),
             ch2: SquareChannel::new(false),
             ch3: WaveChannel::new(),
@@ -65,6 +68,10 @@ impl Apu {
             sample_accum: 0,
             samples: Vec::new(),
         }
+    }
+
+    pub fn set_cgb_mode(&mut self, cgb_mode: bool) {
+        self.cgb_mode = cgb_mode;
     }
 
     pub fn tick(&mut self, cycles: u32) {
@@ -196,7 +203,7 @@ impl Apu {
 
             WAVE_RAM_START..=WAVE_RAM_END => {
                 let index = (addr - WAVE_RAM_START) as usize;
-                self.ch3.read_wave_ram(index)
+                self.ch3.read_wave_ram(index, self.cgb_mode)
             }
 
             0xFF27..=0xFF2F => 0xFF,
@@ -228,7 +235,7 @@ impl Apu {
     pub fn write_register(&mut self, addr: u16, value: u8) {
         if (WAVE_RAM_START..=WAVE_RAM_END).contains(&addr) {
             let index = (addr - WAVE_RAM_START) as usize;
-            self.ch3.write_wave_ram(index, value);
+            self.ch3.write_wave_ram(index, value, self.cgb_mode);
             return;
         }
 
@@ -266,9 +273,9 @@ impl Apu {
             NR30 => self.ch3.write_nr30(value),
             NR31 => self.ch3.write_nr31(value),
             NR32 => self.ch3.write_nr32(value),
-            NR33 => self.ch3.write_nr33(value),
+            NR33 => self.ch3.write_nr33(value, self.cgb_mode),
             NR34 => {
-                self.ch3.write_nr34(value);
+                self.ch3.write_nr34(value, self.cgb_mode);
                 if (value & 0x80) != 0 {
                     self.ch3.trigger();
                 }

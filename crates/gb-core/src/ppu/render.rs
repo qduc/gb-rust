@@ -43,6 +43,14 @@ fn cgb_bg_color(bg_palette_ram: &[u8; 0x40], palette: u8, color_num: u8) -> u32 
     cgb_bgr15_to_argb(color)
 }
 
+fn cgb_obj_color(obj_palette_ram: &[u8; 0x40], palette: u8, color_num: u8) -> u32 {
+    let base = (palette as usize) * 8 + (color_num as usize) * 2;
+    let lo = obj_palette_ram[base];
+    let hi = obj_palette_ram[base + 1];
+    let color = u16::from_le_bytes([lo, hi]);
+    cgb_bgr15_to_argb(color)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn render_bg_window_scanline(
     framebuffer: &mut Framebuffer,
@@ -243,14 +251,17 @@ struct SpriteLine {
     row_hi: u8,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_obj_scanline(
     framebuffer: &mut Framebuffer,
     ly: u8,
     vram0: &[u8; 0x2000],
+    vram1: Option<&[u8; 0x2000]>,
     oam: &[u8; 0xA0],
     io: &[u8; 0x80],
     cgb_mode: bool,
     bg_pixels: &[BgPixelInfo; LCD_WIDTH],
+    obj_palette_ram: &[u8; 0x40],
 ) {
     if ly as usize >= LCD_HEIGHT {
         return;
@@ -301,8 +312,13 @@ fn render_obj_scanline(
 
         let tile_addr = 0x8000u16 + (tile as u16) * 16;
         let row_addr = tile_addr + (row as u16) * 2;
-        let row_lo = vram0[(row_addr - 0x8000) as usize];
-        let row_hi = vram0[(row_addr - 0x8000 + 1) as usize];
+        let tile_vram = if cgb_mode && (attrs & 0x08) != 0 {
+            vram1.unwrap_or(vram0)
+        } else {
+            vram0
+        };
+        let row_lo = tile_vram[(row_addr - 0x8000) as usize];
+        let row_hi = tile_vram[(row_addr - 0x8000 + 1) as usize];
 
         line_sprites[count] = SpriteLine {
             oam_index: i,
@@ -345,6 +361,11 @@ fn render_obj_scanline(
                 continue;
             }
 
+            if cgb_mode {
+                best = Some((sprite.x, sprite.oam_index, sprite.attrs, color_num));
+                break;
+            }
+
             let key = (sprite.x, sprite.oam_index);
             match best {
                 None => best = Some((key.0, key.1, sprite.attrs, color_num)),
@@ -371,10 +392,16 @@ fn render_obj_scanline(
             continue;
         }
 
-        let use_obp1 = (attrs & 0x10) != 0;
-        let pal = if use_obp1 { obp1 } else { obp0 };
-        let shade = (pal >> (color_num * 2)) & 0x03;
-        framebuffer[(ly as usize) * LCD_WIDTH + x] = DMG_SHADES[shade as usize];
+        if cgb_mode {
+            let palette_num = attrs & 0x07;
+            framebuffer[(ly as usize) * LCD_WIDTH + x] =
+                cgb_obj_color(obj_palette_ram, palette_num, color_num);
+        } else {
+            let use_obp1 = (attrs & 0x10) != 0;
+            let pal = if use_obp1 { obp1 } else { obp0 };
+            let shade = (pal >> (color_num * 2)) & 0x03;
+            framebuffer[(ly as usize) * LCD_WIDTH + x] = DMG_SHADES[shade as usize];
+        }
     }
 }
 
@@ -396,7 +423,17 @@ pub fn render_scanline(
         &[0; 0x40],
         Some(&mut bg_pixels),
     );
-    render_obj_scanline(framebuffer, ly, vram, oam, io, false, &bg_pixels);
+    render_obj_scanline(
+        framebuffer,
+        ly,
+        vram,
+        None,
+        oam,
+        io,
+        false,
+        &bg_pixels,
+        &[0; 0x40],
+    );
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -409,6 +446,7 @@ pub fn render_scanline_with_cgb(
     io: &[u8; 0x80],
     cgb_mode: bool,
     bg_palette_ram: &[u8; 0x40],
+    obj_palette_ram: &[u8; 0x40],
 ) {
     let mut bg_pixels = [BgPixelInfo::default(); LCD_WIDTH];
     render_bg_window_scanline(
@@ -421,7 +459,17 @@ pub fn render_scanline_with_cgb(
         bg_palette_ram,
         Some(&mut bg_pixels),
     );
-    render_obj_scanline(framebuffer, ly, vram0, oam, io, cgb_mode, &bg_pixels);
+    render_obj_scanline(
+        framebuffer,
+        ly,
+        vram0,
+        vram1,
+        oam,
+        io,
+        cgb_mode,
+        &bg_pixels,
+        obj_palette_ram,
+    );
 }
 
 #[cfg(test)]

@@ -90,6 +90,8 @@ Optional debug output (run command):\n\
 Suite pass/fail detection:\n\
   - Captures bytes written to SB (0xFF01) when SC (0xFF02) is written with bit7 set\n\
     (common in blargg/mooneye test ROMs).\n\
+    - Also checks blargg-style cart RAM output at $A000 when present (signature at $A001..$A003 = DE B0 61),\n\
+        which is used by suites like cgb_sound for deterministic PASS/FAIL reporting.\n\
   - Marks PASS if output contains any --pass-text (default: 'passed').\n\
   - Marks FAIL if output contains any --fail-text (default: 'failed', 'fail').\n\
   - Otherwise stops at limits and marks TIMEOUT.\n"
@@ -306,22 +308,7 @@ fn parse_self_test_args(args: &[String]) -> Result<SelfTestArgs, String> {
     })
 }
 
-fn init_dmg_post_boot(gb: &mut GameBoy) {
-    // DMG (no-boot-rom) register values commonly used by emulators.
-    gb.cpu.a = 0x01;
-    gb.cpu.f = 0xB0;
-    gb.cpu.b = 0x00;
-    gb.cpu.c = 0x13;
-    gb.cpu.d = 0x00;
-    gb.cpu.e = 0xD8;
-    gb.cpu.h = 0x01;
-    gb.cpu.l = 0x4D;
-    gb.cpu.sp = 0xFFFE;
-    gb.cpu.pc = 0x0100;
-
-    gb.bus.ie = 0x00;
-    gb.bus.iflag = 0x00;
-
+fn init_common_io_post_boot(gb: &mut GameBoy) {
     // Initialize key IO registers (enough for typical test ROMs).
     // Use bus writes to respect any masking side effects.
     let io_inits: &[(u16, u8)] = &[
@@ -360,6 +347,69 @@ fn init_dmg_post_boot(gb: &mut GameBoy) {
 
     for &(addr, val) in io_inits {
         gb.bus.write8(addr, val);
+    }
+}
+
+fn init_dmg_post_boot(gb: &mut GameBoy) {
+    // DMG (no-boot-rom) register values commonly used by emulators.
+    gb.cpu.a = 0x01;
+    gb.cpu.f = 0xB0;
+    gb.cpu.b = 0x00;
+    gb.cpu.c = 0x13;
+    gb.cpu.d = 0x00;
+    gb.cpu.e = 0xD8;
+    gb.cpu.h = 0x01;
+    gb.cpu.l = 0x4D;
+    gb.cpu.sp = 0xFFFE;
+    gb.cpu.pc = 0x0100;
+
+    gb.bus.ie = 0x00;
+    gb.bus.iflag = 0x00;
+
+    init_common_io_post_boot(gb);
+}
+
+fn init_cgb_post_boot(gb: &mut GameBoy) {
+    // CGB (no-boot-rom) register values commonly used by emulators.
+    // These are important for CGB-only test ROMs that expect boot ROM side effects.
+    gb.cpu.a = 0x11;
+    gb.cpu.f = 0x80;
+    gb.cpu.b = 0x00;
+    gb.cpu.c = 0x00;
+    gb.cpu.d = 0xFF;
+    gb.cpu.e = 0x56;
+    gb.cpu.h = 0x00;
+    gb.cpu.l = 0x0D;
+    gb.cpu.sp = 0xFFFE;
+    gb.cpu.pc = 0x0100;
+
+    gb.bus.ie = 0x00;
+    gb.bus.iflag = 0x00;
+
+    // Use the shared IO init list for the common registers (sound/timer/LCDC).
+    init_common_io_post_boot(gb);
+
+    let cgb_io_inits: &[(u16, u8)] = &[
+        (0xFF4D, 0x00), // KEY1 (speed switch prepare cleared)
+        (0xFF4F, 0x00), // VBK
+        (0xFF70, 0x01), // SVBK (bank 1)
+        (0xFF68, 0x00), // BCPS
+        (0xFF69, 0x00), // BCPD
+        (0xFF6A, 0x00), // OCPS
+        (0xFF6B, 0x00), // OCPD
+    ];
+    for &(addr, val) in cgb_io_inits {
+        gb.bus.write8(addr, val);
+    }
+}
+
+fn init_post_boot(gb: &mut GameBoy) {
+    // The bus decides DMG vs CGB from the cartridge header.
+    // Use a matching "post-boot" register init to avoid CGB-specific test flakiness.
+    if gb.bus.mode == gb_core::bus::EmulationMode::Cgb {
+        init_cgb_post_boot(gb);
+    } else {
+        init_dmg_post_boot(gb);
     }
 }
 
@@ -457,6 +507,69 @@ fn scrape_all_bg_text(bus: &Bus) -> String {
     format!("{t9800}\n{t9c00}")
 }
 
+#[derive(Debug)]
+struct BlarggCartRamOutput {
+    status: u8,
+    text: Vec<u8>,
+}
+
+fn read_blargg_cart_ram_output(bus: &mut Bus) -> Option<BlarggCartRamOutput> {
+    // blargg GB test ROMs (including cgb_sound) optionally write a status + text output
+    // to external RAM at $A000:
+    // - $A001..$A003 = signature DE B0 61
+    // - $A000 = 0x80 while running; otherwise final result code (0 = pass)
+    // - $A004.. = zero-terminated text output
+    let sig0 = bus.read8(0xA001);
+    let sig1 = bus.read8(0xA002);
+    let sig2 = bus.read8(0xA003);
+    if [sig0, sig1, sig2] != [0xDE, 0xB0, 0x61] {
+        return None;
+    }
+
+    let status = bus.read8(0xA000);
+    if status == 0x80 {
+        return Some(BlarggCartRamOutput {
+            status,
+            text: Vec::new(),
+        });
+    }
+
+    // Read a bounded amount of text to avoid hanging if the string isn't terminated.
+    let mut text: Vec<u8> = Vec::new();
+    for i in 0..4096u16 {
+        let b = bus.read8(0xA004u16.wrapping_add(i));
+        if b == 0 {
+            break;
+        }
+        text.push(b);
+    }
+
+    Some(BlarggCartRamOutput { status, text })
+}
+
+fn blargg_cart_ram_result(status: u8) -> Option<RomResult> {
+    match status {
+        0x80 => None,
+        0x00 => Some(RomResult::Pass),
+        _ => Some(RomResult::Fail),
+    }
+}
+
+fn maybe_print_blargg_cart_ram_output(label: &str, out: &BlarggCartRamOutput) {
+    if out.text.is_empty() {
+        println!(
+            "--- cart RAM output ({label}) ---\n(status=0x{:02X}, no text)",
+            out.status
+        );
+    } else {
+        println!(
+            "--- cart RAM output ({label}) ---\nstatus=0x{:02X}\n{}",
+            out.status,
+            String::from_utf8_lossy(&out.text)
+        );
+    }
+}
+
 fn run_for_serial_result(
     cart: Cartridge,
     max_frames: Option<u64>,
@@ -469,14 +582,36 @@ fn run_for_serial_result(
         cpu: Cpu::new(),
         bus: Bus::new(cart),
     };
-    init_dmg_post_boot(&mut gb);
+    init_post_boot(&mut gb);
 
     let mut frames: u64 = 0;
     let mut cycles: u64 = 0;
     let mut output: Vec<u8> = Vec::new();
 
+    // Poll blargg cart-RAM ($A000) output at a fixed cadence so CGB sound tests can
+    // be detected even when LCD is disabled (no frame boundary to hook onto).
+    const CART_RAM_POLL_PERIOD_CPU_CYCLES: u64 = 200_000;
+
     loop {
         if max_frames.is_some_and(|m| frames >= m) || max_cycles.is_some_and(|m| cycles >= m) {
+            // blargg cart-RAM output (last-chance): some suites (notably cgb_sound) write
+            // deterministic results to $A000 rather than serial.
+            if let Some(out) = read_blargg_cart_ram_output(&mut gb.bus) {
+                if let Some(res) = blargg_cart_ram_result(out.status) {
+                    if print_vram && res != RomResult::Pass {
+                        maybe_print_blargg_cart_ram_output("on LIMIT", &out);
+                    }
+                    let mut merged = output;
+                    if !out.text.is_empty() {
+                        merged.extend_from_slice(&out.text);
+                        if !merged.ends_with(b"\n") {
+                            merged.push(b'\n');
+                        }
+                    }
+                    return (res, merged, frames, cycles);
+                }
+            }
+
             // Last-chance VRAM scrape: some ROMs (e.g. blargg halt_bug.gb) report results on-screen.
             let screen_lower = scrape_all_bg_text_lower(&gb.bus);
             if contains_any(&screen_lower, fail_text) {
@@ -517,6 +652,30 @@ fn run_for_serial_result(
             }
             if contains_any(&out_lower, pass_text) {
                 return (RomResult::Pass, output, frames, cycles);
+            }
+        }
+
+        // Check blargg cart-RAM status periodically as an alternative to serial output.
+        if cycles != 0 && cycles.is_multiple_of(CART_RAM_POLL_PERIOD_CPU_CYCLES) {
+            if let Some(out) = read_blargg_cart_ram_output(&mut gb.bus) {
+                if let Some(res) = blargg_cart_ram_result(out.status) {
+                    if print_vram && res != RomResult::Pass {
+                        maybe_print_blargg_cart_ram_output("on RESULT", &out);
+                        println!(
+                            "--- VRAM BG tilemap (on RESULT) ---\n{}",
+                            scrape_all_bg_text(&gb.bus)
+                        );
+                    }
+
+                    let mut merged = output;
+                    if !out.text.is_empty() {
+                        merged.extend_from_slice(&out.text);
+                        if !merged.ends_with(b"\n") {
+                            merged.push(b'\n');
+                        }
+                    }
+                    return (res, merged, frames, cycles);
+                }
             }
         }
 
@@ -606,7 +765,7 @@ fn run_single(args: RunArgs) -> Result<i32, String> {
         cpu: Cpu::new(),
         bus: Bus::new(cart),
     };
-    init_dmg_post_boot(&mut gb);
+    init_post_boot(&mut gb);
 
     let mut frames: u64 = 0;
     let mut cycles: u64 = 0;
@@ -653,7 +812,6 @@ fn run_single(args: RunArgs) -> Result<i32, String> {
                 gb.bus.iflag
             );
             let step_cycles = gb.cpu.step(&mut gb.bus);
-            gb.bus.tick(step_cycles);
             cycles += step_cycles as u64;
         } else {
             cycles += gb.step() as u64;

@@ -45,12 +45,25 @@ impl WaveChannel {
         self.sample_index = 0;
     }
 
-    pub fn read_wave_ram(&self, index: usize) -> u8 {
-        self.wave_ram[index]
+    pub fn read_wave_ram(&self, index: usize, cgb_mode: bool) -> u8 {
+        // CGB wave RAM reads while the channel is enabled return the *currently playing*
+        // wave byte, regardless of address (blargg `cgb_sound` behavior).
+        if cgb_mode && self.enabled {
+            self.wave_ram[self.current_wave_byte_index()]
+        } else {
+            self.wave_ram[index]
+        }
     }
 
-    pub fn write_wave_ram(&mut self, index: usize, value: u8) {
-        self.wave_ram[index] = value;
+    pub fn write_wave_ram(&mut self, index: usize, value: u8, cgb_mode: bool) {
+        // CGB wave RAM writes while the channel is enabled affect the *currently playing*
+        // wave byte, regardless of address.
+        if cgb_mode && self.enabled {
+            let idx = self.current_wave_byte_index();
+            self.wave_ram[idx] = value;
+        } else {
+            self.wave_ram[index] = value;
+        }
     }
 
     pub fn write_nr30(&mut self, value: u8) {
@@ -71,12 +84,14 @@ impl WaveChannel {
         self.nr32 = value;
     }
 
-    pub fn write_nr33(&mut self, value: u8) {
+    pub fn write_nr33(&mut self, value: u8, cgb_mode: bool) {
         self.nr33 = value;
+        let _ = cgb_mode;
     }
 
-    pub fn write_nr34(&mut self, value: u8) {
+    pub fn write_nr34(&mut self, value: u8, cgb_mode: bool) {
         self.nr34 = value & 0xC7;
+        let _ = cgb_mode;
     }
 
     pub fn trigger(&mut self) {
@@ -142,16 +157,21 @@ impl WaveChannel {
             byte & 0x0F
         };
 
-        let sample = match self.volume_shift() {
-            Some(shift) => nibble >> shift,
-            None => 0,
+        let Some(shift) = self.volume_shift() else {
+            // Volume code 0 is mute.
+            return 0.0;
         };
 
+        let sample = nibble >> shift;
         (sample as f32 / 7.5) - 1.0
     }
 
     pub fn length_counter(&self) -> u16 {
         self.length_counter
+    }
+
+    fn current_wave_byte_index(&self) -> usize {
+        (self.sample_index / 2) as usize
     }
 }
 

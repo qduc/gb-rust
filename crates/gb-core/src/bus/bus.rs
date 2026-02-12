@@ -53,11 +53,14 @@ impl Bus {
             | crate::cartridge::header::CgbSupport::CgbOnly => EmulationMode::Cgb,
         };
 
+        let mut apu = Apu::new();
+        apu.set_cgb_mode(mode == EmulationMode::Cgb);
+
         Self {
             cart,
             mode,
             ppu: Ppu::new(),
-            apu: Apu::new(),
+            apu,
             timer: Timer::new(),
             input: Joypad::new(),
             serial: Serial::new(),
@@ -593,6 +596,20 @@ impl Bus {
                         0xFF
                     }
                 }
+                0xFF6A => {
+                    if self.is_cgb() {
+                        self.ppu.read_obpi()
+                    } else {
+                        0xFF
+                    }
+                }
+                0xFF6B => {
+                    if self.is_cgb() {
+                        self.ppu.read_obpd()
+                    } else {
+                        0xFF
+                    }
+                }
                 0xFF4F => self.read_vbk(),
                 0xFF70 => self.read_svbk(),
                 0xFF4D => self.read_key1(),
@@ -678,6 +695,16 @@ impl Bus {
                             self.ppu.write_bgpd(val);
                         }
                     }
+                    0xFF6A => {
+                        if self.is_cgb() {
+                            self.ppu.write_obpi(val);
+                        }
+                    }
+                    0xFF6B => {
+                        if self.is_cgb() {
+                            self.ppu.write_obpd(val);
+                        }
+                    }
                     0xFF02 => {
                         self.io[idx] = val;
                         // Common test ROM convention: write a byte to SB (0xFF01), then write 0x81
@@ -714,6 +741,19 @@ impl Bus {
     }
 
     pub fn tick(&mut self, cycles: u32) {
+        // The emulator's CPU executes in 4-cycle M-cycles. On CGB, the CPU can run in
+        // double-speed mode (KEY1). In that mode, *only the CPU* runs at 2x frequency;
+        // PPU/APU/timer/serial remain tied to the base 4_194_304 Hz clock.
+        //
+        // We model this by interpreting `cycles` as CPU cycles, and converting to
+        // base ("system") cycles before ticking the rest of the bus.
+        let cycles = if self.is_cgb() && self.cgb_double_speed {
+            debug_assert_eq!(cycles % 2, 0, "double-speed tick requires even cycle count");
+            cycles / 2
+        } else {
+            cycles
+        };
+
         self.cart.mbc.tick(cycles);
         self.timer.tick(cycles, &mut self.iflag);
         self.tick_oam_dma(cycles);

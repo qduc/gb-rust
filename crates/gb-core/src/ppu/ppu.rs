@@ -14,6 +14,9 @@ pub struct Ppu {
     // CGB BG palette registers/RAM (FF68/FF69).
     cgb_bgpi: u8,
     cgb_bg_palette_ram: [u8; 0x40],
+    // CGB OBJ palette registers/RAM (FF6A/FF6B).
+    cgb_obpi: u8,
+    cgb_obj_palette_ram: [u8; 0x40],
 }
 
 impl Ppu {
@@ -36,6 +39,8 @@ impl Ppu {
             prev_coincidence: false,
             cgb_bgpi: 0,
             cgb_bg_palette_ram: [0; 0x40],
+            cgb_obpi: 0,
+            cgb_obj_palette_ram: [0; 0x40],
         }
     }
 
@@ -114,6 +119,7 @@ impl Ppu {
                         io,
                         cgb_mode,
                         &self.cgb_bg_palette_ram,
+                        &self.cgb_obj_palette_ram,
                     );
                     self.set_mode(3, io, iflag);
                 } else if self.mode == 3 && self.dots == 252 {
@@ -165,6 +171,28 @@ impl Ppu {
         if (self.cgb_bgpi & 0x80) != 0 {
             let next = (index as u8).wrapping_add(1) & 0x3F;
             self.cgb_bgpi = (self.cgb_bgpi & 0x80) | next;
+        }
+    }
+
+    pub fn read_obpi(&self) -> u8 {
+        0x40 | (self.cgb_obpi & 0xBF)
+    }
+
+    pub fn write_obpi(&mut self, val: u8) {
+        self.cgb_obpi = val & 0xBF;
+    }
+
+    pub fn read_obpd(&self) -> u8 {
+        let index = (self.cgb_obpi & 0x3F) as usize;
+        self.cgb_obj_palette_ram[index]
+    }
+
+    pub fn write_obpd(&mut self, val: u8) {
+        let index = (self.cgb_obpi & 0x3F) as usize;
+        self.cgb_obj_palette_ram[index] = val;
+        if (self.cgb_obpi & 0x80) != 0 {
+            let next = (index as u8).wrapping_add(1) & 0x3F;
+            self.cgb_obpi = (self.cgb_obpi & 0x80) | next;
         }
     }
 
