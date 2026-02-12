@@ -22,9 +22,12 @@ This repository is organized as a Cargo workspace with three primary crates:
   - MBC1
   - MBC3 (with RTC and Battery support)
   - MBC5
-- **Input**: Support for keyboard and gamepad via SDL2.
+- **UI & UX**:
+  - **egui Overlay**: In-app menu bar for configuration and controls.
+  - **Save States**: Quick save/load slots and state file support.
+  - **Input**: Support for keyboard and gamepad via SDL2, with remapping support.
 - **Persistence**: Battery-backed SRAM and RTC state are saved to/loaded from `.sav` files.
-- **Testing**: Integrated test runner in `gb-cli` with VRAM tilemap scraping for ROMs that report status on-screen.
+- **Testing**: Integrated test runner in `gb-cli` with serial output, cart RAM detection, and VRAM tilemap scraping.
 
 ## Getting Started
 
@@ -74,7 +77,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 ## Roadmap
 
-The project is currently finishing **Milestone A (DMG Release Readiness)** and moving towards **Milestone B (CGB Expansion)**.
+The project has completed **Milestone A (DMG)** and **Milestone B (CGB Expansion)**. We are currently working on **Milestone C (UI/UX & Quality of Life)**.
 
 See [docs/roadmap.md](docs/roadmap.md) for detailed progress and [docs/project-structure.md](docs/project-structure.md) for architectural details.
 
