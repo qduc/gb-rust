@@ -1,7 +1,9 @@
 //! Interrupt helper types.
 
+use serde::{Deserialize, Serialize};
+
 /// Interrupt bits and vectors, in CPU priority order.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Interrupt {
     VBlank = 0,
     LcdStat = 1,

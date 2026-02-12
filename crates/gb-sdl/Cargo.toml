@@ -4,6 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+bincode = "3.0.0"
+egui = "0.33.3"
+egui_sdl2_gl = "0.33.2"
 gb-core = { path = "../gb-core" }
+gl = "0.14.0"
+rfd = "0.17.2"
 sdl2 = { version = "0.38", features = ["use-pkgconfig"] }
+serde = "1.0.228"
 

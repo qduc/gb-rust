@@ -1,5 +1,6 @@
 use crate::bus::Bus;
 use crate::interrupt::{pending_mask, Interrupt};
+use serde::{Deserialize, Serialize};
 
 use super::{cb_ops, ops};
 
@@ -36,6 +37,7 @@ impl Flag {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Cpu {
     // 8-bit registers
     pub a: u8,
@@ -58,7 +60,7 @@ pub struct Cpu {
     pub ei_pending: bool,
     /// HALT bug latch: next opcode fetch reads at PC without incrementing it.
     pub halt_bug: bool,
-    step_cycles: u32,
+    pub step_cycles: u32,
 }
 
 impl Cpu {

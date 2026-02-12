@@ -1,4 +1,6 @@
-#[derive(Clone)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct NoiseChannel {
     pub enabled: bool,
     pub dac_enabled: bool,

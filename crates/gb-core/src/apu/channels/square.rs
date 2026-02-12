@@ -5,7 +5,9 @@ const DUTY_TABLE: [[u8; 8]; 4] = [
     [0, 1, 1, 1, 1, 1, 1, 0],
 ];
 
-#[derive(Clone)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct SquareChannel {
     pub enabled: bool,
     pub dac_enabled: bool,

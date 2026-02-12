@@ -123,3 +123,9 @@ CGB ROM strategy (must be tracked per phase):
 - [ ] Start with targeted mooneye CGB acceptance tests for the phase feature under development.
 - [ ] Add blargg CGB-sensitive ROMs (including CGB sound/timing) once corresponding subsystems land.
 - [ ] Require phase-local ROM pass evidence before advancing to the next CGB phase.
+
+## 14) Milestone C: UI/UX & Quality of Life ([phase-16-ui-ux](phases/phase-16-ui-ux.md))
+- [ ] Implement core serialization (save states)
+- [ ] Implement battery save support refactor
+- [ ] Add GUI overlay (egui) and file/state management features
+- [ ] Add quality of life controls (turbo, pause, etc.)

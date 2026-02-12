@@ -1,10 +1,13 @@
 use crate::interrupt::Interrupt;
 
+use serde::{Deserialize, Serialize};
+
 /// DMG timer registers:
 /// - DIV  (FF04) = upper 8 bits of an internal 16-bit counter
 /// - TIMA (FF05)
 /// - TMA  (FF06)
 /// - TAC  (FF07)
+#[derive(Serialize, Deserialize)]
 pub struct Timer {
     counter: u16,
     tima: u8,

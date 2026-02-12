@@ -1,11 +1,14 @@
 use crate::cartridge::mbc::Mbc;
+use serde::{Deserialize, Serialize};
 
 const RAM_SIZE: usize = 0x200;
 
+#[derive(Serialize, Deserialize)]
 pub struct Mbc2 {
     ram_enabled: bool,
     rom_bank: u8,
-    ram: [u8; RAM_SIZE],
+    #[serde(with = "serde_bytes")]
+    ram: Vec<u8>,
 }
 
 impl Mbc2 {
@@ -13,7 +16,7 @@ impl Mbc2 {
         Self {
             ram_enabled: false,
             rom_bank: 1,
-            ram: [0; RAM_SIZE],
+            ram: vec![0; RAM_SIZE],
         }
     }
 

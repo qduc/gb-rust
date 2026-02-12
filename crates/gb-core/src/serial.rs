@@ -1,6 +1,8 @@
+use serde::{Deserialize, Serialize};
+
 const SERIAL_INTERNAL_TRANSFER_CYCLES: u32 = 4096;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Serial {
     output: Vec<u8>,
     in_progress: bool,

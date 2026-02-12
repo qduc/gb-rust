@@ -1,18 +1,22 @@
 use crate::apu::Apu;
+use crate::cartridge::mbc::Mbc;
 use crate::cartridge::Cartridge;
 use crate::dma;
 use crate::input::Joypad;
 use crate::ppu::Ppu;
 use crate::serial::Serial;
 use crate::timer::Timer;
+use serde::{Deserialize, Serialize};
+use serde_big_array::BigArray;
 use std::path::Path;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EmulationMode {
     Dmg,
     Cgb,
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Bus {
     pub cart: Cartridge,
     pub mode: EmulationMode,
@@ -21,10 +25,15 @@ pub struct Bus {
     pub timer: Timer,
     pub input: Joypad,
     pub serial: Serial,
+    #[serde(with = "BigArray")]
     pub wram: [u8; 0x8000],
+    #[serde(with = "BigArray")]
     pub vram: [u8; 0x4000],
+    #[serde(with = "BigArray")]
     pub oam: [u8; 0xA0],
+    #[serde(with = "BigArray")]
     pub io: [u8; 0x80],
+    #[serde(with = "BigArray")]
     pub hram: [u8; 0x7F],
     pub ie: u8,
     pub iflag: u8,

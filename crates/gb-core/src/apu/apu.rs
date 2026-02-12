@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use super::channels::noise::NoiseChannel;
 use super::channels::square::SquareChannel;
 use super::channels::wave::WaveChannel;
@@ -29,6 +31,7 @@ const NR52: u16 = 0xFF26;
 const WAVE_RAM_START: u16 = 0xFF30;
 const WAVE_RAM_END: u16 = 0xFF3F;
 
+#[derive(Serialize, Deserialize)]
 pub struct Apu {
     powered: bool,
 

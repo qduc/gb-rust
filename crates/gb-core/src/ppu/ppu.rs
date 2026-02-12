@@ -1,6 +1,11 @@
+use serde::{Deserialize, Serialize};
+use serde_big_array::BigArray;
+
 use super::{Framebuffer, LCD_HEIGHT, LCD_WIDTH};
 
+#[derive(Serialize, Deserialize)]
 pub struct Ppu {
+    #[serde(skip, default = "default_framebuffer")]
     framebuffer: Framebuffer,
     frame_ready: bool,
 
@@ -13,10 +18,16 @@ pub struct Ppu {
 
     // CGB BG palette registers/RAM (FF68/FF69).
     cgb_bgpi: u8,
+    #[serde(with = "BigArray")]
     cgb_bg_palette_ram: [u8; 0x40],
     // CGB OBJ palette registers/RAM (FF6A/FF6B).
     cgb_obpi: u8,
+    #[serde(with = "BigArray")]
     cgb_obj_palette_ram: [u8; 0x40],
+}
+
+fn default_framebuffer() -> Framebuffer {
+    [super::render::DMG_SHADES[0]; LCD_WIDTH * LCD_HEIGHT]
 }
 
 impl Ppu {

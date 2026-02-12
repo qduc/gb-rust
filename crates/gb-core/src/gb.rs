@@ -1,6 +1,8 @@
 use crate::bus::Bus;
 use crate::cpu::Cpu;
+use serde::{Deserialize, Serialize};
 
+#[derive(Serialize, Deserialize)]
 pub struct GameBoy {
     pub cpu: Cpu,
     pub bus: Bus,

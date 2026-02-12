@@ -1,4 +1,6 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CartridgeType {
     RomOnly,
     Mbc1,
@@ -19,7 +21,7 @@ pub enum CartridgeType {
     Mbc5RumbleRamBattery,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RomSize {
     Kilobytes32,  // 1 bank
     Kilobytes64,  // 2 banks
@@ -76,7 +78,7 @@ impl RomSize {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RamSize {
     None,
     Kilobytes8,
@@ -133,7 +135,7 @@ impl CartridgeType {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CgbSupport {
     DmgOnly,
     CgbCompatible,
@@ -154,7 +156,7 @@ impl CgbSupport {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Header {
     pub cartridge_type: CartridgeType,
     pub rom_size: RomSize,
@@ -162,7 +164,7 @@ pub struct Header {
     pub cgb_support: CgbSupport,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum HeaderError {
     RomTooSmall,
     UnsupportedCartridgeType(u8),

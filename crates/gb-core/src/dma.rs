@@ -1,9 +1,11 @@
 // OAM DMA (and later HDMA for GBC)
 
+use serde::{Deserialize, Serialize};
+
 pub const OAM_DMA_BYTES: u16 = 0x00A0;
 pub const OAM_DMA_CYCLES_PER_BYTE: u32 = 4;
 
-#[derive(Copy, Clone, Debug, Default)]
+#[derive(Copy, Clone, Debug, Default, Serialize, Deserialize)]
 pub struct OamDma {
     active: bool,
     source_base: u16,

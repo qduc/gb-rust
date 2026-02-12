@@ -1,6 +1,7 @@
 use crate::interrupt::Interrupt;
+use serde::{Deserialize, Serialize};
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Button {
     Right,
     Left,
@@ -32,6 +33,7 @@ impl Button {
 /// - 0xFF00 bits 4-5 are selection lines (active low)
 /// - bits 0-3 are button state (active low)
 /// - bits 6-7 read as 1
+#[derive(Serialize, Deserialize)]
 pub struct Joypad {
     /// Raw selection bits (bits 4-5) written by CPU (active low).
     select: u8,

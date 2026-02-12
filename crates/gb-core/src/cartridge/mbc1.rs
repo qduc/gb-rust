@@ -1,5 +1,7 @@
 use crate::cartridge::mbc::Mbc;
+use serde::{Deserialize, Serialize};
 
+#[derive(Serialize, Deserialize)]
 pub struct Mbc1 {
     ram_enabled: bool,
     rom_bank_low5: u8,

@@ -1,5 +1,7 @@
 use crate::cartridge::mbc::Mbc;
+use serde::{Deserialize, Serialize};
 
+#[derive(Serialize, Deserialize)]
 pub struct Mbc0;
 
 impl Mbc0 {

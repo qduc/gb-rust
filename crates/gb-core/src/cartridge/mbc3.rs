@@ -1,8 +1,9 @@
 use crate::cartridge::mbc::Mbc;
+use serde::{Deserialize, Serialize};
 
 const CYCLES_PER_SECOND: u32 = 4_194_304;
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, Serialize, Deserialize)]
 struct Rtc {
     sec: u8,
     min: u8,
@@ -79,6 +80,7 @@ impl Rtc {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Mbc3 {
     ram_enabled: bool,
     rom_bank: u8,
