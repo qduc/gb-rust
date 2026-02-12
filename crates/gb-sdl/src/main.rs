@@ -66,6 +66,55 @@ impl QuickSlot {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DisplayScale {
+    Fit,
+    Scale1x,
+    Scale1_5x,
+    Scale2x,
+    Scale3x,
+    Scale4x,
+    Scale5x,
+}
+
+impl DisplayScale {
+    fn factor(self) -> Option<f32> {
+        match self {
+            Self::Fit => None,
+            Self::Scale1x => Some(1.0),
+            Self::Scale1_5x => Some(1.5),
+            Self::Scale2x => Some(2.0),
+            Self::Scale3x => Some(3.0),
+            Self::Scale4x => Some(4.0),
+            Self::Scale5x => Some(5.0),
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Fit => "Fit",
+            Self::Scale1x => "1x",
+            Self::Scale1_5x => "1.5x",
+            Self::Scale2x => "2x",
+            Self::Scale3x => "3x",
+            Self::Scale4x => "4x",
+            Self::Scale5x => "5x",
+        }
+    }
+
+    fn all() -> [Self; 7] {
+        [
+            Self::Fit,
+            Self::Scale1x,
+            Self::Scale1_5x,
+            Self::Scale2x,
+            Self::Scale3x,
+            Self::Scale4x,
+            Self::Scale5x,
+        ]
+    }
+}
+
 struct App {
     gb: GameBoy,
     rom_path: Option<PathBuf>,
@@ -74,6 +123,7 @@ struct App {
     paused: bool,
     turbo: TurboMode,
     volume: f32,
+    display_scale: DisplayScale,
     integer_scale: bool,
     fullscreen: bool,
     auto_pause_on_ui: bool,
@@ -97,6 +147,7 @@ impl App {
             paused: false,
             turbo: TurboMode::Normal,
             volume: 1.0,
+            display_scale: DisplayScale::Scale3x,
             integer_scale: false,
             fullscreen: false,
             auto_pause_on_ui: true,
@@ -206,6 +257,7 @@ impl App {
         let mut request_exit = false;
         let mut request_quick_save: Option<QuickSlot> = None;
         let mut request_quick_load: Option<QuickSlot> = None;
+        let mut request_resize = false;
 
         TopBottomPanel::top("menu_top").show(ctx, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
@@ -280,6 +332,17 @@ impl App {
                         self.show_video_settings = true;
                         ui.close();
                     }
+                    ui.separator();
+                    ui.label("Scale");
+                    for scale in DisplayScale::all() {
+                        if ui
+                            .radio_value(&mut self.display_scale, scale, scale.label())
+                            .changed()
+                        {
+                            request_resize = true;
+                        }
+                    }
+                    ui.separator();
                     ui.checkbox(&mut self.integer_scale, "Integer scaling");
                     if ui.checkbox(&mut self.fullscreen, "Fullscreen").changed() {
                         let mode = if self.fullscreen {
@@ -316,24 +379,44 @@ impl App {
             });
         });
 
+        if request_resize {
+            if let Some(factor) = self.display_scale.factor() {
+                let (win_w, win_h) = window.size();
+                let available = ctx.available_rect().size();
+                let ui_w = win_w as f32 - available.x;
+                let ui_h = win_h as f32 - available.y;
+
+                let new_w = (LCD_WIDTH as f32 * factor + ui_w).ceil() as u32;
+                let new_h = (LCD_HEIGHT as f32 * factor + ui_h).ceil() as u32;
+                let _ = window.set_size(new_w, new_h);
+            }
+        }
+
         egui::CentralPanel::default().show(ctx, |ui| {
             let available = ui.available_size();
             let base_w = LCD_WIDTH as f32;
             let base_h = LCD_HEIGHT as f32;
-            let scale_x = if base_w > 0.0 {
-                available.x / base_w
+
+            let scale = if let Some(f) = self.display_scale.factor() {
+                f
             } else {
-                1.0
+                let scale_x = if base_w > 0.0 {
+                    available.x / base_w
+                } else {
+                    1.0
+                };
+                let scale_y = if base_h > 0.0 {
+                    available.y / base_h
+                } else {
+                    1.0
+                };
+                let mut s = scale_x.min(scale_y);
+                if self.integer_scale && s >= 1.0 {
+                    s = s.floor().max(1.0);
+                }
+                s
             };
-            let scale_y = if base_h > 0.0 {
-                available.y / base_h
-            } else {
-                1.0
-            };
-            let mut scale = scale_x.min(scale_y);
-            if self.integer_scale && scale >= 1.0 {
-                scale = scale.floor().max(1.0);
-            }
+
             let draw_w = (base_w * scale).max(1.0);
             let draw_h = (base_h * scale).max(1.0);
             let draw_size = egui::vec2(draw_w, draw_h);
@@ -355,6 +438,16 @@ impl App {
             Window::new("Video Settings")
                 .open(&mut self.show_video_settings)
                 .show(ctx, |ui| {
+                    ui.label("Scale");
+                    for scale in DisplayScale::all() {
+                        if ui
+                            .radio_value(&mut self.display_scale, scale, scale.label())
+                            .changed()
+                        {
+                            request_resize = true;
+                        }
+                    }
+                    ui.separator();
                     ui.checkbox(&mut self.integer_scale, "Integer scaling");
                     if ui.checkbox(&mut self.fullscreen, "Fullscreen").changed() {
                         let mode = if self.fullscreen {
