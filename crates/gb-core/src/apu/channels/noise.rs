@@ -9,6 +9,7 @@ pub struct NoiseChannel {
     pub nr44: u8,
 
     length_counter: u16,
+    length_frozen: bool,
     timer: u16,
     volume: u8,
     env_timer: u8,
@@ -25,6 +26,7 @@ impl NoiseChannel {
             nr43: 0,
             nr44: 0,
             length_counter: 0,
+            length_frozen: false,
             timer: 1,
             volume: 0,
             env_timer: 0,
@@ -32,14 +34,20 @@ impl NoiseChannel {
         }
     }
 
-    pub fn powered_register_clear(&mut self) {
-        self.enabled = false;
-        self.dac_enabled = false;
-        self.nr41 = 0;
+    pub fn powered_register_clear(&mut self, cgb_mode: bool) {
+        if cgb_mode {
+            self.nr41 = 0;
+        } else {
+            self.nr41 &= 0x3F;
+        }
         self.nr42 = 0;
         self.nr43 = 0;
         self.nr44 = 0;
-        self.length_counter = 0;
+
+        self.enabled = false;
+        self.dac_enabled = false;
+        // self.length_counter is preserved
+        self.length_frozen = false;
         self.timer = 1;
         self.volume = 0;
         self.env_timer = 0;
@@ -64,8 +72,25 @@ impl NoiseChannel {
         self.nr43 = value;
     }
 
-    pub fn write_nr44(&mut self, value: u8) {
-        self.nr44 = value & 0xC0;
+    pub fn write_nr44(&mut self, value: u8, frame_seq_step: u8, cgb_mode: bool) {
+        let old_len_en = (self.nr44 & 0x40) != 0;
+        let new_len_en = (value & 0x40) != 0;
+        let trigger = (value & 0x80) != 0;
+        let old_frozen = self.length_frozen;
+
+        self.nr44 = value & 0xC7;
+
+        if trigger {
+            self.trigger();
+        }
+
+        if frame_seq_step % 2 != 0 {
+            if !old_len_en && new_len_en {
+                self.clock_length_internal(true, cgb_mode);
+            } else if trigger && new_len_en && old_frozen && cgb_mode {
+                self.clock_length_internal(false, cgb_mode);
+            }
+        }
     }
 
     pub fn trigger(&mut self) {
@@ -73,6 +98,7 @@ impl NoiseChannel {
             self.length_counter = 64;
         }
 
+        self.length_frozen = false;
         self.timer = self.period();
         self.env_timer = self.envelope_period();
         self.volume = (self.nr42 >> 4) & 0x0F;
@@ -99,6 +125,10 @@ impl NoiseChannel {
     }
 
     pub fn clock_length(&mut self) {
+        self.clock_length_internal(false, false);
+    }
+
+    pub(crate) fn clock_length_internal(&mut self, is_extra_clock: bool, cgb_mode: bool) {
         if (self.nr44 & 0x40) == 0 {
             return;
         }
@@ -107,7 +137,12 @@ impl NoiseChannel {
             self.length_counter -= 1;
             if self.length_counter == 0 {
                 self.enabled = false;
+                if is_extra_clock && cgb_mode {
+                    self.length_frozen = true;
+                }
             }
+        } else if is_extra_clock && cgb_mode {
+            self.length_frozen = true;
         }
     }
 

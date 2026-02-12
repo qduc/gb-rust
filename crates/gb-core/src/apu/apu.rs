@@ -88,10 +88,10 @@ impl Apu {
             self.ch4.tick_timer();
         }
 
-        self.frame_seq_counter = self.frame_seq_counter.wrapping_add(1);
-        if self.frame_seq_counter >= FRAME_SEQUENCER_PERIOD_CYCLES {
-            self.frame_seq_counter = 0;
-            if self.powered {
+        if self.powered || self.cgb_mode {
+            self.frame_seq_counter = self.frame_seq_counter.wrapping_add(1);
+            if self.frame_seq_counter >= FRAME_SEQUENCER_PERIOD_CYCLES {
+                self.frame_seq_counter = 0;
                 self.clock_frame_sequencer();
             }
         }
@@ -108,24 +108,29 @@ impl Apu {
     }
 
     fn clock_frame_sequencer(&mut self) {
-        if self.frame_seq_step.is_multiple_of(2) {
-            self.ch1.clock_length();
-            self.ch2.clock_length();
-            self.ch3.clock_length();
-            self.ch4.clock_length();
+        let step = self.frame_seq_step;
+        self.frame_seq_step = (self.frame_seq_step + 1) & 7;
+
+        if (self.powered || self.cgb_mode) && step % 2 == 0 {
+            self.ch1.clock_length_internal(false, self.cgb_mode);
+            self.ch2.clock_length_internal(false, self.cgb_mode);
+            self.ch3.clock_length_internal(false, self.cgb_mode);
+            self.ch4.clock_length_internal(false, self.cgb_mode);
         }
 
-        if self.frame_seq_step == 2 || self.frame_seq_step == 6 {
+        if !self.powered {
+            return;
+        }
+
+        if step == 2 || step == 6 {
             self.ch1.clock_sweep();
         }
 
-        if self.frame_seq_step == 7 {
+        if step == 7 {
             self.ch1.clock_envelope();
             self.ch2.clock_envelope();
             self.ch4.clock_envelope();
         }
-
-        self.frame_seq_step = (self.frame_seq_step + 1) & 7;
     }
 
     fn mix_stereo(&self) -> (f32, f32) {
@@ -245,6 +250,15 @@ impl Apu {
         }
 
         if !self.powered {
+            if !self.cgb_mode {
+                match addr {
+                    NR11 => self.ch1.write_duty_length(value & 0x3F),
+                    NR21 => self.ch2.write_duty_length(value & 0x3F),
+                    NR31 => self.ch3.write_nr31(value),
+                    NR41 => self.ch4.write_nr41(value & 0x3F),
+                    _ => {}
+                }
+            }
             return;
         }
 
@@ -253,43 +267,23 @@ impl Apu {
             NR11 => self.ch1.write_duty_length(value),
             NR12 => self.ch1.write_envelope(value),
             NR13 => self.ch1.write_freq_lo(value),
-            NR14 => {
-                self.ch1.write_freq_hi(value);
-                if (value & 0x80) != 0 {
-                    self.ch1.trigger();
-                }
-            }
+            NR14 => self.ch1.write_nr14(value, self.frame_seq_step, self.cgb_mode),
 
             NR21 => self.ch2.write_duty_length(value),
             NR22 => self.ch2.write_envelope(value),
             NR23 => self.ch2.write_freq_lo(value),
-            NR24 => {
-                self.ch2.write_freq_hi(value);
-                if (value & 0x80) != 0 {
-                    self.ch2.trigger();
-                }
-            }
+            NR24 => self.ch2.write_nr14(value, self.frame_seq_step, self.cgb_mode),
 
             NR30 => self.ch3.write_nr30(value),
             NR31 => self.ch3.write_nr31(value),
             NR32 => self.ch3.write_nr32(value),
             NR33 => self.ch3.write_nr33(value, self.cgb_mode),
-            NR34 => {
-                self.ch3.write_nr34(value, self.cgb_mode);
-                if (value & 0x80) != 0 {
-                    self.ch3.trigger();
-                }
-            }
+            NR34 => self.ch3.write_nr34(value, self.frame_seq_step, self.cgb_mode),
 
             NR41 => self.ch4.write_nr41(value),
             NR42 => self.ch4.write_nr42(value),
             NR43 => self.ch4.write_nr43(value),
-            NR44 => {
-                self.ch4.write_nr44(value);
-                if (value & 0x80) != 0 {
-                    self.ch4.trigger();
-                }
-            }
+            NR44 => self.ch4.write_nr44(value, self.frame_seq_step, self.cgb_mode),
 
             NR50 => self.nr50 = value,
             NR51 => self.nr51 = value,
@@ -305,17 +299,27 @@ impl Apu {
             self.powered = false;
             self.nr50 = 0;
             self.nr51 = 0;
-            self.frame_seq_step = 0;
-            self.frame_seq_counter = 0;
 
-            self.ch1.powered_register_clear();
-            self.ch2.powered_register_clear();
-            self.ch3.powered_register_clear();
-            self.ch4.powered_register_clear();
+            // On DMG, the frame sequencer is reset when powered off.
+            // On CGB, it keeps running.
+            if !self.cgb_mode {
+                self.frame_seq_step = 0;
+                self.frame_seq_counter = 0;
+            }
+
+            self.ch1.powered_register_clear(self.cgb_mode);
+            self.ch2.powered_register_clear(self.cgb_mode);
+            self.ch3.powered_register_clear(self.cgb_mode);
+            self.ch4.powered_register_clear(self.cgb_mode);
         } else if !self.powered && next_power {
             self.powered = true;
-            self.frame_seq_step = 0;
-            self.frame_seq_counter = 0;
+
+            // On DMG, the frame sequencer is reset when powered on.
+            // On CGB, it continues from its current state.
+            if !self.cgb_mode {
+                self.frame_seq_step = 0;
+                self.frame_seq_counter = 0;
+            }
         }
     }
 

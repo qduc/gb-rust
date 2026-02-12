@@ -17,6 +17,7 @@ pub struct SquareChannel {
     pub freq_hi: u8,     // NRx4
 
     length_counter: u16,
+    length_frozen: bool,
     timer: u16,
     duty_step: u8,
     volume: u8,
@@ -40,6 +41,7 @@ impl SquareChannel {
             freq_lo: 0,
             freq_hi: 0,
             length_counter: 0,
+            length_frozen: false,
             timer: 1,
             duty_step: 0,
             volume: 0,
@@ -52,16 +54,21 @@ impl SquareChannel {
         }
     }
 
-    pub fn powered_register_clear(&mut self) {
+    pub fn powered_register_clear(&mut self, cgb_mode: bool) {
         self.sweep = 0;
-        self.duty_length = 0;
+        if cgb_mode {
+            self.duty_length = 0;
+        } else {
+            self.duty_length &= 0x3F;
+        }
         self.envelope = 0;
         self.freq_lo = 0;
         self.freq_hi = 0;
 
         self.enabled = false;
         self.dac_enabled = false;
-        self.length_counter = 0;
+        // self.length_counter is preserved
+        self.length_frozen = false;
         self.timer = 1;
         self.duty_step = 0;
         self.volume = 0;
@@ -104,8 +111,25 @@ impl SquareChannel {
         self.freq_lo = value;
     }
 
-    pub fn write_freq_hi(&mut self, value: u8) {
+    pub fn write_nr14(&mut self, value: u8, frame_seq_step: u8, cgb_mode: bool) {
+        let old_len_en = (self.freq_hi & 0x40) != 0;
+        let new_len_en = (value & 0x40) != 0;
+        let trigger = (value & 0x80) != 0;
+        let old_frozen = self.length_frozen;
+
         self.freq_hi = value & 0xC7;
+
+        if trigger {
+            self.trigger();
+        }
+
+        if frame_seq_step % 2 != 0 {
+            if !old_len_en && new_len_en {
+                self.clock_length_internal(true, cgb_mode);
+            } else if trigger && new_len_en && old_frozen && cgb_mode {
+                self.clock_length_internal(false, cgb_mode);
+            }
+        }
     }
 
     pub fn trigger(&mut self) {
@@ -113,6 +137,7 @@ impl SquareChannel {
             self.length_counter = 64;
         }
 
+        self.length_frozen = false;
         self.timer = self.period();
         self.duty_step = 0;
         self.volume = (self.envelope >> 4) & 0x0F;
@@ -175,6 +200,10 @@ impl SquareChannel {
     }
 
     pub fn clock_length(&mut self) {
+        self.clock_length_internal(false, false);
+    }
+
+    pub(crate) fn clock_length_internal(&mut self, is_extra_clock: bool, cgb_mode: bool) {
         if (self.freq_hi & 0x40) == 0 {
             return;
         }
@@ -183,7 +212,12 @@ impl SquareChannel {
             self.length_counter -= 1;
             if self.length_counter == 0 {
                 self.enabled = false;
+                if is_extra_clock && cgb_mode {
+                    self.length_frozen = true;
+                }
             }
+        } else if is_extra_clock && cgb_mode {
+            self.length_frozen = true;
         }
     }
 

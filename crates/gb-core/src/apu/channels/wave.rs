@@ -10,8 +10,10 @@ pub struct WaveChannel {
     pub nr34: u8,
 
     length_counter: u16,
+    length_frozen: bool,
     timer: u16,
     sample_index: u8,
+    sample_buffer: u8,
     wave_ram: [u8; 16],
 }
 
@@ -26,32 +28,72 @@ impl WaveChannel {
             nr33: 0,
             nr34: 0,
             length_counter: 0,
+            length_frozen: false,
             timer: 1,
             sample_index: 0,
+            sample_buffer: 0,
             wave_ram: [0; 16],
         }
     }
 
-    pub fn powered_register_clear(&mut self) {
-        self.enabled = false;
-        self.dac_enabled = false;
+    pub fn powered_register_clear(&mut self, cgb_mode: bool) {
         self.nr30 = 0;
-        self.nr31 = 0;
+        if cgb_mode {
+            self.nr31 = 0;
+        }
         self.nr32 = 0;
         self.nr33 = 0;
         self.nr34 = 0;
-        self.length_counter = 0;
+
+        self.enabled = false;
+        self.dac_enabled = false;
+        // self.length_counter is preserved
+        self.length_frozen = false;
         self.timer = 1;
         self.sample_index = 0;
+        self.sample_buffer = 0;
     }
 
-    pub fn read_wave_ram(&self, index: usize, cgb_mode: bool) -> u8 {
+    pub fn trigger(&mut self, cgb_mode: bool) {
+        if self.length_counter == 0 {
+            self.length_counter = 256;
+        }
+
+        self.length_frozen = false;
+
+        // On CGB, there is a small delay before the first sample period starts.
+        // SameBoy uses period + 2.
+        self.timer = self.period() + if cgb_mode { 2 } else { 0 };
+        self.sample_index = 0;
+        if cgb_mode {
+            self.sample_buffer = self.wave_ram[0];
+        }
+        self.enabled = self.dac_enabled;
+    }
+
+    pub fn tick_timer(&mut self) {
+        if self.timer > 1 {
+            self.timer -= 1;
+            return;
+        }
+
+        self.timer = self.period();
+        self.sample_index = (self.sample_index + 1) & 31;
+        self.sample_buffer = self.wave_ram[(self.sample_index / 2) as usize];
+    }
+
+    pub fn read_wave_ram(&self, _index: usize, cgb_mode: bool) -> u8 {
         // CGB wave RAM reads while the channel is enabled return the *currently playing*
-        // wave byte, regardless of address (blargg `cgb_sound` behavior).
+        // wave byte, which is stored in the sample buffer.
         if cgb_mode && self.enabled {
-            self.wave_ram[self.current_wave_byte_index()]
+            self.sample_buffer
         } else {
-            self.wave_ram[index]
+            // DMG behavior: wave RAM is inaccessible while the channel is enabled.
+            if !cgb_mode && self.enabled {
+                0xFF
+            } else {
+                self.wave_ram[_index]
+            }
         }
     }
 
@@ -59,10 +101,14 @@ impl WaveChannel {
         // CGB wave RAM writes while the channel is enabled affect the *currently playing*
         // wave byte, regardless of address.
         if cgb_mode && self.enabled {
-            let idx = self.current_wave_byte_index();
+            let idx = (self.sample_index / 2) as usize;
             self.wave_ram[idx] = value;
+            self.sample_buffer = value;
         } else {
-            self.wave_ram[index] = value;
+            // DMG behavior: writes are ignored while the channel is enabled.
+            if cgb_mode || !self.enabled {
+                self.wave_ram[index] = value;
+            }
         }
     }
 
@@ -89,32 +135,32 @@ impl WaveChannel {
         let _ = cgb_mode;
     }
 
-    pub fn write_nr34(&mut self, value: u8, cgb_mode: bool) {
+    pub fn write_nr34(&mut self, value: u8, frame_seq_step: u8, cgb_mode: bool) {
+        let old_len_en = (self.nr34 & 0x40) != 0;
+        let new_len_en = (value & 0x40) != 0;
+        let trigger = (value & 0x80) != 0;
+        let old_frozen = self.length_frozen;
+
         self.nr34 = value & 0xC7;
-        let _ = cgb_mode;
-    }
 
-    pub fn trigger(&mut self) {
-        if self.length_counter == 0 {
-            self.length_counter = 256;
+        if trigger {
+            self.trigger(cgb_mode);
         }
 
-        self.timer = self.period();
-        self.sample_index = 0;
-        self.enabled = self.dac_enabled;
-    }
-
-    pub fn tick_timer(&mut self) {
-        if self.timer > 1 {
-            self.timer -= 1;
-            return;
+        if frame_seq_step % 2 != 0 {
+            if !old_len_en && new_len_en {
+                self.clock_length_internal(true, cgb_mode);
+            } else if trigger && new_len_en && old_frozen && cgb_mode {
+                self.clock_length_internal(false, cgb_mode);
+            }
         }
-
-        self.timer = self.period();
-        self.sample_index = (self.sample_index + 1) & 31;
     }
 
     pub fn clock_length(&mut self) {
+        self.clock_length_internal(false, false);
+    }
+
+    pub(crate) fn clock_length_internal(&mut self, is_extra_clock: bool, cgb_mode: bool) {
         if (self.nr34 & 0x40) == 0 {
             return;
         }
@@ -123,7 +169,12 @@ impl WaveChannel {
             self.length_counter -= 1;
             if self.length_counter == 0 {
                 self.enabled = false;
+                if is_extra_clock && cgb_mode {
+                    self.length_frozen = true;
+                }
             }
+        } else if is_extra_clock && cgb_mode {
+            self.length_frozen = true;
         }
     }
 
@@ -150,7 +201,7 @@ impl WaveChannel {
             return 0.0;
         }
 
-        let byte = self.wave_ram[(self.sample_index / 2) as usize];
+        let byte = self.sample_buffer;
         let nibble = if (self.sample_index & 1) == 0 {
             byte >> 4
         } else {
@@ -168,10 +219,6 @@ impl WaveChannel {
 
     pub fn length_counter(&self) -> u16 {
         self.length_counter
-    }
-
-    fn current_wave_byte_index(&self) -> usize {
-        (self.sample_index / 2) as usize
     }
 }
 
