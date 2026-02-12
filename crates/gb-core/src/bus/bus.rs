@@ -468,6 +468,9 @@ impl Bus {
     }
 
     fn trigger_oam_bug_on_read_access(&mut self, addr: u16) {
+        if self.is_cgb() {
+            return;
+        }
         if !(0xFE00..=0xFEFF).contains(&addr) {
             return;
         }
@@ -484,6 +487,9 @@ impl Bus {
     }
 
     fn trigger_oam_bug_on_write_access(&mut self, addr: u16) {
+        if self.is_cgb() {
+            return;
+        }
         if !(0xFE00..=0xFEFF).contains(&addr) {
             return;
         }
@@ -493,6 +499,9 @@ impl Bus {
     }
 
     pub fn trigger_oam_bug_idu_write(&mut self, idu_addr: u16) {
+        if self.is_cgb() {
+            return;
+        }
         if !(0xFE00..=0xFEFF).contains(&idu_addr) {
             return;
         }
@@ -502,7 +511,7 @@ impl Bus {
     }
 
     pub fn schedule_oam_bug_idu_read(&mut self, idu_addr: u16) {
-        if !(0xFE00..=0xFEFF).contains(&idu_addr) {
+        if self.is_cgb() || !(0xFE00..=0xFEFF).contains(&idu_addr) {
             self.oam_bug_read_idu_pending_addr = None;
             return;
         }

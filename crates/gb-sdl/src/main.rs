@@ -17,22 +17,7 @@ fn keycode_to_button(key: sdl2::keyboard::Keycode) -> Option<gb_core::input::But
     }
 }
 
-fn init_dmg_post_boot(gb: &mut gb_core::gb::GameBoy) {
-    // DMG (no-boot-rom) register values commonly used by emulators.
-    gb.cpu.a = 0x01;
-    gb.cpu.f = 0xB0;
-    gb.cpu.b = 0x00;
-    gb.cpu.c = 0x13;
-    gb.cpu.d = 0x00;
-    gb.cpu.e = 0xD8;
-    gb.cpu.h = 0x01;
-    gb.cpu.l = 0x4D;
-    gb.cpu.sp = 0xFFFE;
-    gb.cpu.pc = 0x0100;
-
-    gb.bus.ie = 0x00;
-    gb.bus.iflag = 0x01;
-
+fn init_common_io_post_boot(gb: &mut gb_core::gb::GameBoy) {
     let io_inits: &[(u16, u8)] = &[
         (0xFF00, 0xCF),
         (0xFF05, 0x00),
@@ -69,6 +54,72 @@ fn init_dmg_post_boot(gb: &mut gb_core::gb::GameBoy) {
 
     for &(addr, val) in io_inits {
         gb.bus.write8(addr, val);
+    }
+}
+
+fn init_dmg_post_boot(gb: &mut gb_core::gb::GameBoy) {
+    // DMG (no-boot-rom) register values commonly used by emulators.
+    gb.cpu.a = 0x01;
+    gb.cpu.f = 0xB0;
+    gb.cpu.b = 0x00;
+    gb.cpu.c = 0x13;
+    gb.cpu.d = 0x00;
+    gb.cpu.e = 0xD8;
+    gb.cpu.h = 0x01;
+    gb.cpu.l = 0x4D;
+    gb.cpu.sp = 0xFFFE;
+    gb.cpu.pc = 0x0100;
+
+    gb.bus.ie = 0x00;
+    gb.bus.iflag = 0x01;
+
+    init_common_io_post_boot(gb);
+}
+
+fn init_cgb_post_boot(gb: &mut gb_core::gb::GameBoy) {
+    // CGB (no-boot-rom) register values commonly used by emulators.
+    gb.cpu.a = 0x11;
+    gb.cpu.f = 0x80;
+    gb.cpu.b = 0x00;
+    gb.cpu.c = 0x00;
+    gb.cpu.d = 0xFF;
+    gb.cpu.e = 0x56;
+    gb.cpu.h = 0x00;
+    gb.cpu.l = 0x0D;
+    gb.cpu.sp = 0xFFFE;
+    gb.cpu.pc = 0x0100;
+
+    gb.bus.ie = 0x00;
+    gb.bus.iflag = 0x01;
+
+    init_common_io_post_boot(gb);
+
+    let cgb_io_inits: &[(u16, u8)] = &[
+        (0xFF4D, 0x00), // KEY1
+        (0xFF4F, 0x00), // VBK
+        (0xFF70, 0x01), // SVBK
+        (0xFF68, 0x00), // BCPS
+        (0xFF69, 0x00), // BCPD
+        (0xFF6A, 0x00), // OCPS
+        (0xFF6B, 0x00), // OCPD
+    ];
+    for &(addr, val) in cgb_io_inits {
+        gb.bus.write8(addr, val);
+    }
+
+    // CGB boot ROM sets BG palette 0 color 0 to white (0x7FFF).
+    // Without this, many CGB games start with a black screen because
+    // palette RAM defaults to zero.
+    gb.bus.ppu.write_bgpi(0x80); // auto-increment, index 0
+    gb.bus.ppu.write_bgpd(0xFF); // low byte of 0x7FFF
+    gb.bus.ppu.write_bgpd(0x7F); // high byte of 0x7FFF
+}
+
+fn init_post_boot(gb: &mut gb_core::gb::GameBoy) {
+    if gb.bus.mode == gb_core::bus::EmulationMode::Cgb {
+        init_cgb_post_boot(gb);
+    } else {
+        init_dmg_post_boot(gb);
     }
 }
 
@@ -147,7 +198,7 @@ fn main() -> Result<(), String> {
         cpu: Cpu::new(),
         bus: Bus::new(cart),
     };
-    init_dmg_post_boot(&mut gb);
+    init_post_boot(&mut gb);
     const GB_FPS: f64 = 4_194_304.0 / (456.0 * 154.0);
     let frame_duration = Duration::from_secs_f64(1.0 / GB_FPS);
     let mut next_frame_at = Instant::now();

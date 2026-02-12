@@ -401,6 +401,13 @@ fn init_cgb_post_boot(gb: &mut GameBoy) {
     for &(addr, val) in cgb_io_inits {
         gb.bus.write8(addr, val);
     }
+
+    // CGB boot ROM sets BG palette 0 color 0 to white (0x7FFF).
+    // Without this, many CGB games start with a black screen because
+    // palette RAM defaults to zero.
+    gb.bus.ppu.write_bgpi(0x80); // auto-increment, index 0
+    gb.bus.ppu.write_bgpd(0xFF); // low byte of 0x7FFF
+    gb.bus.ppu.write_bgpd(0x7F); // high byte of 0x7FFF
 }
 
 fn init_post_boot(gb: &mut GameBoy) {
