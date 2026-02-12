@@ -59,13 +59,12 @@ Transform the emulator from a basic runtime into a user-friendly application wit
 - Added ROM open hotkey (`Cmd/Ctrl+O`) and default state hotkeys (`Cmd/Ctrl+S`, `Cmd/Ctrl+L`).
 
 ## Exit Gates
-- [ ] `cargo check` and `cargo test` pass.
-- [ ] Save States work reliably (load restores exact point).
-- [ ] Battery saves persist.
-- [ ] GUI works without crashing SDL.
+- [x] `cargo check` and `cargo test` pass.
+- [x] Save States work reliably (load restores exact point).
+- [x] Battery saves persist.
+- [x] GUI works without crashing SDL.
 
 Current verification status:
-- `cargo check -p gb-sdl`: PASS
-- `cargo fmt --all`: PASS
+- `cargo fmt --all --check`: PASS
 - `cargo clippy --workspace --all-targets -- -D warnings`: PASS
-- `cargo test --workspace`: FAIL (existing `crates/gb-core/tests/cartridge_parse.rs` expectations mismatch current `CartridgeError` variants; unrelated to phase 16 UI/UX changes)
+- `cargo test --workspace`: PASS (all tests green)

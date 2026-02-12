@@ -97,7 +97,7 @@ impl App {
             paused: false,
             turbo: TurboMode::Normal,
             volume: 1.0,
-            integer_scale: true,
+            integer_scale: false,
             fullscreen: false,
             auto_pause_on_ui: true,
             show_audio_settings: false,
@@ -199,7 +199,6 @@ impl App {
         ctx: &Context,
         window: &mut sdl2::video::Window,
         gb_texture: egui::TextureId,
-        ppp: f32,
     ) -> bool {
         let mut request_open_rom = false;
         let mut request_save_state = false;
@@ -300,6 +299,23 @@ impl App {
             });
         });
 
+        TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(format!("ROM: {}", self.rom_display_name()));
+                ui.separator();
+                ui.label(format!(
+                    "State: {}",
+                    if self.paused { "Paused" } else { "Running" }
+                ));
+                ui.separator();
+                ui.label(format!("Turbo: {}", self.turbo.label()));
+                ui.separator();
+                ui.label(format!("Volume: {:.0}%", self.volume * 100.0));
+                ui.separator();
+                ui.label(self.status.clone());
+            });
+        });
+
         egui::CentralPanel::default().show(ctx, |ui| {
             let available = ui.available_size();
             let base_w = LCD_WIDTH as f32;
@@ -315,15 +331,16 @@ impl App {
                 1.0
             };
             let mut scale = scale_x.min(scale_y);
-            if self.integer_scale {
+            if self.integer_scale && scale >= 1.0 {
                 scale = scale.floor().max(1.0);
             }
             let draw_w = (base_w * scale).max(1.0);
             let draw_h = (base_h * scale).max(1.0);
-            ui.vertical_centered(|ui| {
-                let image = egui::Image::new((gb_texture, egui::vec2(draw_w / ppp, draw_h / ppp)));
-                ui.add(image);
-            });
+            let draw_size = egui::vec2(draw_w, draw_h);
+            let (panel_rect, _) = ui.allocate_exact_size(available, egui::Sense::hover());
+            let image_rect = egui::Rect::from_center_size(panel_rect.center(), draw_size);
+            let image = egui::Image::new((gb_texture, draw_size));
+            ui.put(image_rect, image);
         });
 
         if self.show_audio_settings {
@@ -421,23 +438,6 @@ impl App {
                 }
             }
         }
-
-        TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                ui.label(format!("ROM: {}", self.rom_display_name()));
-                ui.separator();
-                ui.label(format!(
-                    "State: {}",
-                    if self.paused { "Paused" } else { "Running" }
-                ));
-                ui.separator();
-                ui.label(format!("Turbo: {}", self.turbo.label()));
-                ui.separator();
-                ui.label(format!("Volume: {:.0}%", self.volume * 100.0));
-                ui.separator();
-                ui.label(self.status.clone());
-            });
-        });
 
         request_exit
     }
@@ -589,6 +589,35 @@ fn write_framebuffer_rgba8888_bytes(fb: &gb_core::ppu::Framebuffer, out: &mut [u
     }
 }
 
+fn scale_mouse_motion_event_for_egui(event: Event, pixels_per_point: f32) -> Event {
+    if (pixels_per_point - 1.0).abs() < f32::EPSILON {
+        return event;
+    }
+
+    match event {
+        Event::MouseMotion {
+            timestamp,
+            window_id,
+            which,
+            mousestate,
+            x,
+            y,
+            xrel,
+            yrel,
+        } => Event::MouseMotion {
+            timestamp,
+            window_id,
+            which,
+            mousestate,
+            x: (x as f32 * pixels_per_point).round() as i32,
+            y: (y as f32 * pixels_per_point).round() as i32,
+            xrel: (xrel as f32 * pixels_per_point).round() as i32,
+            yrel: (yrel as f32 * pixels_per_point).round() as i32,
+        },
+        _ => event,
+    }
+}
+
 fn main() -> Result<(), String> {
     let sdl = sdl2::init()?;
     let video_subsystem = sdl.video()?;
@@ -615,6 +644,33 @@ fn main() -> Result<(), String> {
 
     let (mut painter, mut egui_state): (Painter, EguiStateHandler) =
         with_sdl2(&window, ShaderVersion::Default, DpiScaling::Default);
+
+    // Fix Retina/HiDPI: egui_sdl2_gl always computes pixels_per_point as 1.0
+    // (its DPI formula simplifies to x * 1/x = 1).  Derive the real scale
+    // from the ratio of drawable pixels to logical window points, then patch
+    // the painter and egui state so that:
+    //   - canvas_size / glViewport use physical pixels  (e.g. 960×864)
+    //   - screen_rect / egui layout use logical points  (e.g. 480×432)
+    //   - UI text and widgets render at the correct size
+    {
+        let (draw_w, _draw_h) = window.drawable_size();
+        let (win_w, _win_h) = window.size();
+        let native_ppp = if win_w > 0 {
+            draw_w as f32 / win_w as f32
+        } else {
+            1.0
+        };
+        painter.pixels_per_point = native_ppp;
+        egui_state.native_pixels_per_point = native_ppp;
+        painter.update_screen_rect(window.drawable_size());
+        egui_state.input.screen_rect = Some(painter.screen_rect);
+        egui_state
+            .input
+            .viewports
+            .entry(egui::ViewportId::ROOT)
+            .or_default()
+            .native_pixels_per_point = Some(native_ppp);
+    }
 
     let egui_ctx = Context::default();
     let gb_texture = painter.new_user_texture_rgba8(
@@ -645,7 +701,9 @@ fn main() -> Result<(), String> {
 
     'running: loop {
         for event in event_pump.poll_iter() {
-            egui_state.process_input(&window, event.clone(), &mut painter);
+            let egui_event =
+                scale_mouse_motion_event_for_egui(event.clone(), painter.pixels_per_point);
+            egui_state.process_input(&window, egui_event, &mut painter);
 
             match event {
                 Event::Quit { .. }
@@ -756,10 +814,10 @@ fn main() -> Result<(), String> {
             if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Space)) {
                 app.paused = !app.paused;
             }
-            request_exit = app.ui(ctx, &mut window, gb_texture, painter.pixels_per_point);
+            request_exit = app.ui(ctx, &mut window, gb_texture);
         });
         egui_state.process_output(&window, &full_output.platform_output);
-        ui_wants_input = egui_ctx.wants_keyboard_input() || egui_ctx.wants_pointer_input();
+        ui_wants_input = egui_ctx.wants_keyboard_input() || egui_ctx.is_using_pointer();
         if request_exit {
             break 'running;
         }
