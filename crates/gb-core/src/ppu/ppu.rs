@@ -10,6 +10,10 @@ pub struct Ppu {
     mode: u8,
     lcd_enabled: bool,
     prev_coincidence: bool,
+
+    // CGB BG palette registers/RAM (FF68/FF69).
+    cgb_bgpi: u8,
+    cgb_bg_palette_ram: [u8; 0x40],
 }
 
 impl Ppu {
@@ -30,6 +34,8 @@ impl Ppu {
             mode: 0,
             lcd_enabled: false,
             prev_coincidence: false,
+            cgb_bgpi: 0,
+            cgb_bg_palette_ram: [0; 0x40],
         }
     }
 
@@ -47,11 +53,25 @@ impl Ppu {
 
     pub fn tick(
         &mut self,
-        mut cycles: u32,
+        cycles: u32,
         vram: &[u8; 0x2000],
         oam: &[u8; 0xA0],
         io: &mut [u8; 0x80],
         iflag: &mut u8,
+    ) {
+        self.tick_with_vram_banks(cycles, vram, None, oam, io, iflag, false);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn tick_with_vram_banks(
+        &mut self,
+        mut cycles: u32,
+        vram0: &[u8; 0x2000],
+        vram1: Option<&[u8; 0x2000]>,
+        oam: &[u8; 0xA0],
+        io: &mut [u8; 0x80],
+        iflag: &mut u8,
+        cgb_mode: bool,
     ) {
         let enabled = (io[Self::LCDC] & 0x80) != 0;
         if !enabled {
@@ -70,7 +90,7 @@ impl Ppu {
 
         if !self.lcd_enabled {
             self.lcd_enabled = true;
-            self.dots = 4;
+            self.dots = 0;
             self.ly = 0;
             self.mode = 2;
             self.prev_coincidence = false;
@@ -85,7 +105,16 @@ impl Ppu {
             // Mode transitions during visible lines.
             if self.ly < 144 {
                 if self.mode == 2 && self.dots == 80 {
-                    super::render::render_scanline(&mut self.framebuffer, self.ly, vram, oam, io);
+                    super::render::render_scanline_with_cgb(
+                        &mut self.framebuffer,
+                        self.ly,
+                        vram0,
+                        vram1,
+                        oam,
+                        io,
+                        cgb_mode,
+                        &self.cgb_bg_palette_ram,
+                    );
                     self.set_mode(3, io, iflag);
                 } else if self.mode == 3 && self.dots == 252 {
                     self.set_mode(0, io, iflag);
@@ -115,6 +144,28 @@ impl Ppu {
         }
 
         self.sync_registers(io, iflag);
+    }
+
+    pub fn read_bgpi(&self) -> u8 {
+        0x40 | (self.cgb_bgpi & 0xBF)
+    }
+
+    pub fn write_bgpi(&mut self, val: u8) {
+        self.cgb_bgpi = val & 0xBF;
+    }
+
+    pub fn read_bgpd(&self) -> u8 {
+        let index = (self.cgb_bgpi & 0x3F) as usize;
+        self.cgb_bg_palette_ram[index]
+    }
+
+    pub fn write_bgpd(&mut self, val: u8) {
+        let index = (self.cgb_bgpi & 0x3F) as usize;
+        self.cgb_bg_palette_ram[index] = val;
+        if (self.cgb_bgpi & 0x80) != 0 {
+            let next = (index as u8).wrapping_add(1) & 0x3F;
+            self.cgb_bgpi = (self.cgb_bgpi & 0x80) | next;
+        }
     }
 
     fn cycles_to_next_event(&self) -> u32 {

@@ -35,6 +35,11 @@ pub struct Bus {
     cgb_speed_switch_prepare: bool,
     cgb_vram_bank: u8,
     cgb_wram_bank: u8,
+    cgb_hdma_src: u16,
+    cgb_hdma_dst: u16,
+    cgb_hdma_blocks_remaining: u8,
+    cgb_hdma_active: bool,
+    cgb_hdma_last_hblank_ly: Option<u8>,
     oam_bug_read_idu_pending_addr: Option<u16>,
 }
 
@@ -68,6 +73,11 @@ impl Bus {
             cgb_speed_switch_prepare: false,
             cgb_vram_bank: 0,
             cgb_wram_bank: 1,
+            cgb_hdma_src: 0,
+            cgb_hdma_dst: 0x8000,
+            cgb_hdma_blocks_remaining: 0,
+            cgb_hdma_active: false,
+            cgb_hdma_last_hblank_ly: None,
             oam_bug_read_idu_pending_addr: None,
         }
     }
@@ -171,6 +181,169 @@ impl Bus {
             return;
         }
         self.cgb_speed_switch_prepare = (val & 0x01) != 0;
+    }
+
+    fn read_hdma1(&self) -> u8 {
+        if !self.is_cgb() {
+            return 0xFF;
+        }
+        (self.cgb_hdma_src >> 8) as u8
+    }
+
+    fn read_hdma2(&self) -> u8 {
+        if !self.is_cgb() {
+            return 0xFF;
+        }
+        (self.cgb_hdma_src as u8) & 0xF0
+    }
+
+    fn read_hdma3(&self) -> u8 {
+        if !self.is_cgb() {
+            return 0xFF;
+        }
+        (((self.cgb_hdma_dst - 0x8000) >> 8) as u8) & 0x1F
+    }
+
+    fn read_hdma4(&self) -> u8 {
+        if !self.is_cgb() {
+            return 0xFF;
+        }
+        ((self.cgb_hdma_dst - 0x8000) as u8) & 0xF0
+    }
+
+    fn read_hdma5(&self) -> u8 {
+        if !self.is_cgb() {
+            return 0xFF;
+        }
+
+        if !self.cgb_hdma_active && self.cgb_hdma_blocks_remaining == 0 {
+            return 0xFF;
+        }
+
+        let len = self.cgb_hdma_blocks_remaining.saturating_sub(1) & 0x7F;
+        if self.cgb_hdma_active {
+            len
+        } else {
+            0x80 | len
+        }
+    }
+
+    fn write_hdma1(&mut self, val: u8) {
+        if !self.is_cgb() {
+            return;
+        }
+        self.cgb_hdma_src = ((val as u16) << 8) | (self.cgb_hdma_src & 0x00F0);
+    }
+
+    fn write_hdma2(&mut self, val: u8) {
+        if !self.is_cgb() {
+            return;
+        }
+        self.cgb_hdma_src = (self.cgb_hdma_src & 0xFF00) | ((val as u16) & 0x00F0);
+    }
+
+    fn write_hdma3(&mut self, val: u8) {
+        if !self.is_cgb() {
+            return;
+        }
+        let upper = ((val & 0x1F) as u16) << 8;
+        let lower = (self.cgb_hdma_dst - 0x8000) & 0x00F0;
+        self.cgb_hdma_dst = 0x8000 | upper | lower;
+    }
+
+    fn write_hdma4(&mut self, val: u8) {
+        if !self.is_cgb() {
+            return;
+        }
+        let upper = (self.cgb_hdma_dst - 0x8000) & 0x1F00;
+        let lower = (val as u16) & 0x00F0;
+        self.cgb_hdma_dst = 0x8000 | upper | lower;
+    }
+
+    fn sanitize_hdma_source(addr: u16) -> u16 {
+        let masked = addr & 0xFFF0;
+        if (0x8000..=0x9FF0).contains(&masked) {
+            masked & 0x7FF0
+        } else {
+            masked
+        }
+    }
+
+    fn start_hdma_transfer(&mut self, control: u8) {
+        if !self.is_cgb() {
+            return;
+        }
+
+        // Writing bit7=0 while HDMA is active terminates the in-progress HBlank transfer.
+        if self.cgb_hdma_active && (control & 0x80) == 0 {
+            self.cgb_hdma_active = false;
+            self.cgb_hdma_last_hblank_ly = None;
+            return;
+        }
+
+        self.cgb_hdma_src = Self::sanitize_hdma_source(self.cgb_hdma_src);
+        self.cgb_hdma_dst = 0x8000 | ((self.cgb_hdma_dst - 0x8000) & 0x1FF0);
+        self.cgb_hdma_blocks_remaining = (control & 0x7F).wrapping_add(1);
+        self.cgb_hdma_last_hblank_ly = None;
+
+        if (control & 0x80) == 0 {
+            self.cgb_hdma_active = false;
+            while self.cgb_hdma_blocks_remaining > 0 {
+                self.perform_hdma_block();
+            }
+        } else {
+            self.cgb_hdma_active = true;
+        }
+    }
+
+    fn perform_hdma_block(&mut self) {
+        if self.cgb_hdma_blocks_remaining == 0 {
+            self.cgb_hdma_active = false;
+            return;
+        }
+
+        let src_base = Self::sanitize_hdma_source(self.cgb_hdma_src);
+        let dst_base = 0x8000 | ((self.cgb_hdma_dst - 0x8000) & 0x1FF0);
+
+        for i in 0..0x10u16 {
+            let v = self.read8_direct(src_base.wrapping_add(i));
+            self.write8_direct(dst_base.wrapping_add(i), v);
+        }
+
+        self.cgb_hdma_src = Self::sanitize_hdma_source(src_base.wrapping_add(0x10));
+        self.cgb_hdma_dst = 0x8000 | (((dst_base - 0x8000).wrapping_add(0x10)) & 0x1FF0);
+        self.cgb_hdma_blocks_remaining -= 1;
+
+        if self.cgb_hdma_blocks_remaining == 0 {
+            self.cgb_hdma_active = false;
+            self.cgb_hdma_last_hblank_ly = None;
+        }
+    }
+
+    fn tick_hdma(&mut self) {
+        if !self.is_cgb() || !self.cgb_hdma_active {
+            return;
+        }
+
+        // Pragmatic behavior: if LCD is disabled, perform remaining blocks immediately.
+        if !self.lcd_enabled() {
+            while self.cgb_hdma_blocks_remaining > 0 {
+                self.perform_hdma_block();
+            }
+            return;
+        }
+
+        let ly = self.io[0x44];
+        let mode = self.ppu_mode();
+
+        if mode == 0 && ly < 144 {
+            if self.cgb_hdma_last_hblank_ly != Some(ly) {
+                self.perform_hdma_block();
+                self.cgb_hdma_last_hblank_ly = Some(ly);
+            }
+        } else {
+            self.cgb_hdma_last_hblank_ly = None;
+        }
     }
 
     fn lcd_enabled(&self) -> bool {
@@ -401,6 +574,25 @@ impl Bus {
                 0xFF07 => self.timer.read_tac(),
                 0xFF0F => self.iflag | 0xE0,
                 0xFF10..=0xFF3F => self.apu.read_register(addr),
+                0xFF51 => self.read_hdma1(),
+                0xFF52 => self.read_hdma2(),
+                0xFF53 => self.read_hdma3(),
+                0xFF54 => self.read_hdma4(),
+                0xFF55 => self.read_hdma5(),
+                0xFF68 => {
+                    if self.is_cgb() {
+                        self.ppu.read_bgpi()
+                    } else {
+                        0xFF
+                    }
+                }
+                0xFF69 => {
+                    if self.is_cgb() {
+                        self.ppu.read_bgpd()
+                    } else {
+                        0xFF
+                    }
+                }
                 0xFF4F => self.read_vbk(),
                 0xFF70 => self.read_svbk(),
                 0xFF4D => self.read_key1(),
@@ -471,6 +663,21 @@ impl Bus {
                     0xFF4F => self.write_vbk(val),
                     0xFF4D => self.write_key1(val),
                     0xFF70 => self.write_svbk(val),
+                    0xFF51 => self.write_hdma1(val),
+                    0xFF52 => self.write_hdma2(val),
+                    0xFF53 => self.write_hdma3(val),
+                    0xFF54 => self.write_hdma4(val),
+                    0xFF55 => self.start_hdma_transfer(val),
+                    0xFF68 => {
+                        if self.is_cgb() {
+                            self.ppu.write_bgpi(val);
+                        }
+                    }
+                    0xFF69 => {
+                        if self.is_cgb() {
+                            self.ppu.write_bgpd(val);
+                        }
+                    }
                     0xFF02 => {
                         self.io[idx] = val;
                         // Common test ROM convention: write a byte to SB (0xFF01), then write 0x81
@@ -513,8 +720,20 @@ impl Bus {
         let vram0: &[u8; 0x2000] = self.vram[..0x2000]
             .try_into()
             .expect("slice length for vram0 is fixed");
-        self.ppu
-            .tick(cycles, vram0, &self.oam, &mut self.io, &mut self.iflag);
+        let vram1: &[u8; 0x2000] = self.vram[0x2000..]
+            .try_into()
+            .expect("slice length for vram1 is fixed");
+        let cgb_mode = self.is_cgb();
+        self.ppu.tick_with_vram_banks(
+            cycles,
+            vram0,
+            Some(vram1),
+            &self.oam,
+            &mut self.io,
+            &mut self.iflag,
+            cgb_mode,
+        );
+        self.tick_hdma();
         self.apu.tick(cycles);
         self.serial
             .tick(cycles, &mut self.iflag, &mut self.io[0x02]);
