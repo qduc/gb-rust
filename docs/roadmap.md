@@ -80,8 +80,8 @@ Boundary summary:
   - `oam_bug` suite is fully fixed and reports FULL PASS as of 2026-02-11.
   - `interrupt_time.gb` remains a Milestone B (CGB) target due to cycle-accurate interrupt latency requirements.
   - `dmg_sound` baseline is complete; APU functional for real games with some edge-case parity gaps deferred to Milestone B.
-  - **CGB progress:** Phase 14 first slices landed (BG attributes, BG palette registers, OBJ palette & sprite slice). Phase 15 work is under way: double-speed modeling, APU wave RAM CGB semantics, and CGB sound ROM triage.
-  - **CGB sound triage:** `roms/gb-test-roms/cgb_sound/rom_singles` now reports **10/12 pass, 2 fail**. Remaining failing singles: `03-trigger.gb` and `09-wave read while on.gb` (see `docs/cgb-rom-manifest.md` for evidence and repro commands).
+  - **CGB progress:** Phase 14 completed and Phase 15 (audio & timing) is **COMPLETED** — double-speed modeling, APU wave-RAM semantics, timing quirks and frame-sequencer fixes implemented and validated.
+  - **CGB sound triage:** `roms/gb-test-roms/cgb_sound/rom_singles` now reports **12/12 pass**; previously failing singles `03-trigger.gb` and `09-wave read while on.gb` have been fixed (see `docs/cgb-rom-manifest.md` for evidence and repro commands).
 
 ## 12) Milestone A Backlog (Complete Before Any CGB Work)
 Execution order is strict:
@@ -116,7 +116,7 @@ Ordered CGB phases:
 - [x] Phase 12: CGB mode foundation (KEY1/speed switch, boot mode detection, CGB-only register gating) — [phase-12-cgb-mode-foundation](phases/phase-12-cgb-mode-foundation.md)
 - [x] Phase 13: CGB memory model (VRAM bank switching, WRAM banking, HDMA/GDMA behavior) — [phase-13-cgb-memory-model](phases/phase-13-cgb-memory-model.md)
 - [x] Phase 14: CGB PPU features (attributes, palettes, priority rules, tile bank behavior, master priority) — COMPLETED — ([phase-14-cgb-ppu-features](phases/phase-14-cgb-ppu-features.md))
-- [ ] Phase 15: CGB audio/timing stabilization and frontend validation — **in progress** (double-speed alignment implemented; APU *wave RAM* CGB semantics implemented; CGB sound ROM triage performed; a few singles remain failing: `03-trigger`, `09-wave read while on`)
+- [x] Phase 15: CGB audio/timing stabilization and frontend validation — **COMPLETED** (double-speed alignment implemented; APU *wave RAM* CGB semantics implemented; CGB sound ROM triage completed; `cgb_sound` singles all pass)
 
 CGB ROM strategy (must be tracked per phase):
 - [ ] Keep a pinned CGB ROM manifest in docs with expected status per ROM (`pass`/`fail`/`deferred`): [cgb-rom-manifest](cgb-rom-manifest.md)
