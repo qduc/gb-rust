@@ -34,26 +34,38 @@ Transform the emulator from a basic runtime into a user-friendly application wit
 - [x] Verify compilation.
 
 ### 2. GUI Integration (`gb-sdl`)
--   Add `egui` dependencies.
--   Initialize `egui` context.
--   In the main loop:
-    -   Process SDL events -> Pass to `egui`.
-    -   If `egui` captures input, do not pass to `GameBoy`.
-    -   Draw `GameBoy` texture.
-    -   Draw `egui` overlay on top.
-    -   Present.
+- [x] Add `egui` dependencies.
+- [x] Initialize `egui` context.
+- [x] In the main loop:
+    - [x] Process SDL events -> Pass to `egui`.
+    - [x] If `egui` captures input, do not pass to `GameBoy`.
+    - [x] Draw `GameBoy` texture.
+    - [x] Draw `egui` overlay on top.
+    - [x] Present.
 
 ### 3. Feature Wiring
--   **File Picker**: Use `rfd` to select file -> Drop current `GameBoy`, create new one with selected ROM.
--   **State Save/Load**:
-    -   `File -> Save State`: `bincode::serialize(&gb)` -> write to `rom_name.state`.
-    -   `File -> Load State`: read file -> `bincode::deserialize` -> replace `gb`.
--   **Battery Saves**:
-    -   On Drop/Exit of `Cartridge` (or periodically), call `save_to_path`.
-    -   On Load, call `load_from_path`.
+- [x] **File Picker**: Use `rfd` to select file -> Drop current `GameBoy`, create new one with selected ROM.
+- [x] **State Save/Load**:
+    - [x] `File -> Save State`: `bincode::serialize(&gb)` -> write to `rom_name.state`.
+    - [x] `File -> Load State`: read file -> `bincode::deserialize` -> replace `gb`.
+- [x] **Battery Saves**:
+    - [x] On Drop/Exit of `Cartridge` (and periodically), call `save_to_path`.
+    - [x] On Load, call `load_from_path`.
+
+### Phase 16 notes
+- Implemented menu groups: File, Emulation, Audio, Video, Debug.
+- Implemented controls: pause/resume (menu + hotkey), turbo (1x/2x/4x/uncapped), volume scaling, integer scaling toggle, fullscreen toggle.
+- Implemented state slots: quick save/load slots 1-3 (menu), plus hotkeys (`F5`/`F8` for slot 1).
+- Added ROM open hotkey (`Cmd/Ctrl+O`) and default state hotkeys (`Cmd/Ctrl+S`, `Cmd/Ctrl+L`).
 
 ## Exit Gates
 - [ ] `cargo check` and `cargo test` pass.
 - [ ] Save States work reliably (load restores exact point).
 - [ ] Battery saves persist.
 - [ ] GUI works without crashing SDL.
+
+Current verification status:
+- `cargo check -p gb-sdl`: PASS
+- `cargo fmt --all`: PASS
+- `cargo clippy --workspace --all-targets -- -D warnings`: PASS
+- `cargo test --workspace`: FAIL (existing `crates/gb-core/tests/cartridge_parse.rs` expectations mismatch current `CartridgeError` variants; unrelated to phase 16 UI/UX changes)

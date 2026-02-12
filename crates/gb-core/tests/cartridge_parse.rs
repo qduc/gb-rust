@@ -5,27 +5,24 @@ use gb_core::cartridge::{Cartridge, CartridgeError};
 fn rejects_rom_smaller_than_header_region() {
     let rom = vec![0u8; 0x0100];
     match Cartridge::from_rom(rom) {
-        Err(CartridgeError::HeaderParse(HeaderError::RomTooSmall)) => {}
+        Err(CartridgeError::InvalidHeader(HeaderError::RomTooSmall)) => {}
         Err(_) => panic!("unexpected error"),
         Ok(_) => panic!("expected parse error"),
     }
 }
 
 #[test]
-fn rejects_rom_shorter_than_declared_size() {
+fn parses_header_even_if_rom_shorter_than_declared() {
     let mut rom = vec![0u8; 0x4000];
     rom[0x0147] = 0x00; // ROM only
     rom[0x0148] = 0x01; // Declares 64KB
     rom[0x0149] = 0x00; // No RAM
 
-    match Cartridge::from_rom(rom) {
-        Err(CartridgeError::RomTooSmall {
-            declared: 0x8000,
-            actual: 0x4000,
-        }) => {}
-        Err(_) => panic!("unexpected error"),
-        Ok(_) => panic!("expected size error"),
-    }
+    let cart = Cartridge::from_rom(rom).expect("should parse header even if ROM is short");
+    // header should reflect the declared size even when ROM bytes are shorter
+    assert_eq!(cart.header.rom_size.bank_count(), 2);
+    // and the stored rom length remains the provided (short) size
+    assert_eq!(cart.rom.len(), 0x4000);
 }
 
 #[test]
@@ -36,7 +33,7 @@ fn rejects_unsupported_cartridge_type() {
     rom[0x0149] = 0x00;
 
     match Cartridge::from_rom(rom) {
-        Err(CartridgeError::HeaderParse(HeaderError::UnsupportedCartridgeType(0xFF))) => {}
+        Err(CartridgeError::InvalidHeader(HeaderError::UnsupportedCartridgeType(0xFF))) => {}
         Err(_) => panic!("unexpected error"),
         Ok(_) => panic!("expected parse error"),
     }

@@ -52,10 +52,21 @@ impl SdlAudio {
     }
 }
 
-pub fn pump_apu_to_sdl(apu: &mut gb_core::apu::Apu, audio: &SdlAudio) -> Result<(), String> {
+pub fn pump_apu_to_sdl(
+    apu: &mut gb_core::apu::Apu,
+    audio: &SdlAudio,
+    volume: f32,
+) -> Result<(), String> {
     let mut samples = apu.take_samples();
     if samples.is_empty() {
         return Ok(());
+    }
+
+    let volume = volume.clamp(0.0, 2.0);
+    if (volume - 1.0).abs() > f32::EPSILON {
+        for sample in &mut samples {
+            *sample = (*sample * volume).clamp(-1.0, 1.0);
+        }
     }
 
     const MAX_QUEUE_MS: u32 = 120;

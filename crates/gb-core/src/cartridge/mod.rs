@@ -6,7 +6,7 @@ pub mod mbc2;
 pub mod mbc3;
 pub mod mbc5;
 
-use self::header::{CartridgeType, Header};
+use self::header::Header;
 use crate::cartridge::mbc::Mbc;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -95,9 +95,9 @@ impl Cartridge {
         let mut data = self.ram.clone();
         let extra = self.mbc.save_extra();
         if !extra.is_empty() {
-             data.extend_from_slice(b"GBSV1");
-             data.extend_from_slice(&(extra.len() as u32).to_le_bytes());
-             data.extend_from_slice(&extra);
+            data.extend_from_slice(b"GBSV1");
+            data.extend_from_slice(&(extra.len() as u32).to_le_bytes());
+            data.extend_from_slice(&extra);
         }
 
         std::fs::write(path, data).map_err(|e| SaveError::Io(e.to_string()))
@@ -116,12 +116,12 @@ impl Cartridge {
         // Basic verification: data must be at least as large as RAM
         let ram_len = self.ram.len();
         if data.len() < ram_len {
-             // If save file is smaller than RAM, copy what we can, but likely invalid/partial
-             if ram_len > 0 {
-                  let copy_len = data.len();
-                  self.ram[..copy_len].copy_from_slice(&data[..copy_len]);
-             }
-             return Ok(());
+            // If save file is smaller than RAM, copy what we can, but likely invalid/partial
+            if ram_len > 0 {
+                let copy_len = data.len();
+                self.ram[..copy_len].copy_from_slice(&data[..copy_len]);
+            }
+            return Ok(());
         }
 
         // Load RAM
@@ -131,27 +131,29 @@ impl Cartridge {
 
         // Check for footer
         let trailer = &data[ram_len..];
-         if trailer.is_empty() {
+        if trailer.is_empty() {
             return self.mbc.load_extra(&[]).map_err(SaveError::InvalidFormat);
         }
 
         if trailer.len() < 9 {
-             // Too short for header, ignore
-             return Ok(());
+            // Too short for header, ignore
+            return Ok(());
         }
 
         if &trailer[..5] != b"GBSV1" {
-             // Not our format, maybe raw RAM dump.
-             return Ok(());
+            // Not our format, maybe raw RAM dump.
+            return Ok(());
         }
 
         let len_bytes = [trailer[5], trailer[6], trailer[7], trailer[8]];
         let extra_len = u32::from_le_bytes(len_bytes) as usize;
 
         if trailer.len() < 9 + extra_len {
-             return Err(SaveError::InvalidFormat("save trailer truncated"));
+            return Err(SaveError::InvalidFormat("save trailer truncated"));
         }
 
-        self.mbc.load_extra(&trailer[9..9+extra_len]).map_err(SaveError::InvalidFormat)
+        self.mbc
+            .load_extra(&trailer[9..9 + extra_len])
+            .map_err(SaveError::InvalidFormat)
     }
 }
