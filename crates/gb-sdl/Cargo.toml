@@ -3,13 +3,17 @@ name = "gb-sdl"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = ["system-sdl"]
+system-sdl = ["sdl2/use-pkgconfig", "egui_sdl2_gl/sdl2_use-pkgconfig"]
+bundled-sdl = ["sdl2/bundled", "egui_sdl2_gl/sdl2_bundled"]
+
 [dependencies]
 bincode = "1.3.3"
 egui = "0.33.3"
-egui_sdl2_gl = { version = "0.33.2", default-features = false, features = ["sdl2_use-pkgconfig"] }
+egui_sdl2_gl = { version = "0.33.2", default-features = false }
 gb-core = { path = "../gb-core" }
 gl = "0.14.0"
 rfd = "0.17.2"
-sdl2 = { version = "0.38", features = ["use-pkgconfig"] }
+sdl2 = { version = "0.38", default-features = false }
 serde = "1.0.228"
-
